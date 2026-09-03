@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Sunprime Admin",
-    "slug": "sunprime-mobile-admin",
+    "slug": "sunprime-pos",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "sunprimeadmin",
