@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=18"
   },
   "scripts": {
     "build": "turbo run build --filter=@sunprime/shared --filter=@sunprime/backend --filter=@sunprime/web-pos",
@@ -24,13 +24,6 @@
     "overrides": {
       "@sunprime/web-pos>react": "19.0.0",
       "@sunprime/web-pos>react-dom": "19.0.0"
-    },
-    "packageExtensions": {
-      "@sunprime/mobile-admin": {
-        "peerDependencies": {
-          "react-dom": "*"
-        }
-      }
     }
   }
 }

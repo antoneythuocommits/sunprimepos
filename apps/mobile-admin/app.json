@@ -15,7 +15,7 @@
       "backgroundColor": "#1e3a2b"
     },
     "android": {
-      "package": "com.sunprime.admin",
+      "package": "com.ant0ney.sunprimepos",
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
