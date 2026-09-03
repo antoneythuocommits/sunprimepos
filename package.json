@@ -1,0 +1,36 @@
+{
+  "name": "sunprime-pos",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build --filter=@sunprime/shared --filter=@sunprime/backend --filter=@sunprime/web-pos",
+    "dev": "turbo run dev --filter=@sunprime/shared --filter=@sunprime/backend --filter=@sunprime/web-pos",
+    "dev:backend": "turbo run dev --filter=@sunprime/backend",
+    "dev:web": "turbo run dev --filter=@sunprime/web-pos",
+    "dev:mobile": "pnpm --filter=@sunprime/mobile-admin start",
+    "test": "turbo run test --filter=@sunprime/backend",
+    "lint": "turbo run lint --filter=@sunprime/shared --filter=@sunprime/backend --filter=@sunprime/web-pos",
+    "db:migrate": "pnpm --filter=@sunprime/backend db:migrate",
+    "db:seed": "pnpm --filter=@sunprime/backend db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@sunprime/web-pos>react": "19.0.0",
+      "@sunprime/web-pos>react-dom": "19.0.0"
+    },
+    "packageExtensions": {
+      "@sunprime/mobile-admin": {
+        "peerDependencies": {
+          "react-dom": "*"
+        }
+      }
+    }
+  }
+}
