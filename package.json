@@ -20,10 +20,5 @@
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   },
-  "pnpm": {
-    "overrides": {
-      "@sunprime/web-pos>react": "19.0.0",
-      "@sunprime/web-pos>react-dom": "19.0.0"
-    }
-  }
+  "pnpm": {}
 }

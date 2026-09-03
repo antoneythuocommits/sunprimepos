@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "sunprimeadmin",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "platforms": ["ios", "android"],
     "icon": "./assets/icon.png",
     "splash": {
@@ -22,7 +22,22 @@
         "backgroundColor": "#1e3a2b"
       }
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25",
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "35.0.0"
+          }
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     },
