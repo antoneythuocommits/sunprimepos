@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { supabase } from '../src/lib/supabase';
+import { getSupabase } from '../src/lib/supabase';
 import { api } from '../src/lib/api';
 
 export default function LoginScreen() {
@@ -19,7 +19,7 @@ export default function LoginScreen() {
 
   async function onLogin() {
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await getSupabase().auth.signInWithPassword({ email, password });
     if (error) {
       setBusy(false);
       Alert.alert('Login failed', error.message);
@@ -28,7 +28,7 @@ export default function LoginScreen() {
     try {
       const me = await api<{ user: { role: string } }>('/me');
       if (me.user.role !== 'admin') {
-        await supabase.auth.signOut();
+        await getSupabase().auth.signOut();
         Alert.alert('Access denied', 'Admin role required');
         setBusy(false);
         return;

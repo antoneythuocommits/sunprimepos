@@ -1,12 +1,12 @@
 import { Tabs, useRouter } from 'expo-router';
 import { Pressable, Text } from 'react-native';
-import { supabase } from '../../src/lib/supabase';
+import { getSupabase } from '../../src/lib/supabase';
 
 export default function TabsLayout() {
   const router = useRouter();
 
   async function logout() {
-    await supabase.auth.signOut();
+    await getSupabase().auth.signOut();
     router.replace('/login');
   }
 
