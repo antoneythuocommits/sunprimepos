@@ -24,10 +24,10 @@ const ExpoSecureStoreAdapter = {
   },
 };
 
-function readEnv(name: string): string {
-  const fromProcess = process.env[name];
-  const fromExtra = (Constants.expoConfig?.extra as Record<string, string> | undefined)?.[name];
-  return (fromProcess || fromExtra || '').trim();
+function extraValue(name: string): string {
+  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+  const value = extra?.[name];
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function isValidHttpUrl(value: string): boolean {
@@ -39,9 +39,16 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-export const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL');
-export const supabaseAnonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-export const apiUrl = readEnv('EXPO_PUBLIC_API_URL') || 'http://localhost:4000';
+// Keep these as static process.env.EXPO_PUBLIC_* reads so Expo inlines them at build time.
+export const supabaseUrl = (
+  process.env.EXPO_PUBLIC_SUPABASE_URL || extraValue('EXPO_PUBLIC_SUPABASE_URL')
+).trim();
+export const supabaseAnonKey = (
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || extraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY')
+).trim();
+export const apiUrl = (
+  process.env.EXPO_PUBLIC_API_URL || extraValue('EXPO_PUBLIC_API_URL') || 'http://localhost:4000'
+).trim();
 
 export const supabaseConfigured =
   isValidHttpUrl(supabaseUrl) &&

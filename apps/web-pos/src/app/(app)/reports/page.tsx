@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from 'react';
 import type { SalesReport } from '@sunprime/shared';
-import { AppShell } from '@/components/AppShell';
 import { useProgress } from '@/components/ProgressDialog';
 import { api, money } from '@/lib/api';
 
@@ -34,7 +33,6 @@ export default function ReportsPage() {
   }
 
   return (
-    <AppShell>
       <section className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4 space-y-4">
         <h1 className="text-lg font-semibold">Sales reports</h1>
         <form onSubmit={load} className="flex flex-wrap gap-3 items-end">
@@ -131,6 +129,5 @@ export default function ReportsPage() {
           </>
         )}
       </section>
-    </AppShell>
   );
 }

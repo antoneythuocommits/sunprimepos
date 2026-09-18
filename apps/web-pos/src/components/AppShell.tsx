@@ -3,10 +3,9 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import type { AppUser } from '@sunprime/shared';
-import { api } from '@/lib/api';
+import { useAuth } from '@/components/AuthProvider';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { getSupabase } from '@/lib/supabase';
-import { useProgress } from '@/components/ProgressDialog';
 
 const links = [
   { href: '/pos', label: 'Sales' },
@@ -20,41 +19,23 @@ const links = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { show, hide } = useProgress();
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [ready, setReady] = useState(false);
+  const { user, status, clear } = useAuth();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    show('Loading session…');
-    api<{ user: AppUser }>('/me')
-      .then((r) => {
-        if (!cancelled) setUser(r.user);
-      })
-      .catch(() => {
-        if (!cancelled) router.replace('/login');
-      })
-      .finally(() => {
-        hide();
-        if (!cancelled) setReady(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [router, show, hide]);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.replace('/login');
+    }
+  }, [status, router]);
 
   async function logout() {
-    show('Signing out…');
-    try {
-      await getSupabase().auth.signOut();
-      router.replace('/login');
-    } finally {
-      hide();
-    }
-  }
-
-  if (!ready || !user) {
-    return <div className="min-h-screen" />;
+    clear();
+    await getSupabase().auth.signOut();
+    router.replace('/login');
   }
 
   return (
@@ -66,13 +47,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="flex flex-wrap gap-1 flex-1">
             {links
-              .filter((l) => !l.admin || user.role === 'admin')
+              .filter((l) => !l.admin || !mounted || user?.role !== 'cashier')
               .map((l) => {
                 const active = pathname.startsWith(l.href);
                 return (
                   <Link
                     key={l.href}
                     href={l.href}
+                    prefetch
                     className={`px-3 py-1.5 rounded-md text-sm transition ${
                       active
                         ? 'bg-[var(--brand)] text-white'
@@ -85,7 +67,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               })}
           </nav>
           <div className="text-sm text-[var(--muted)] flex items-center gap-3">
-            <span>{user.email}</span>
+            {mounted && user ? (
+              <span className="hidden sm:inline">{user.username || user.email}</span>
+            ) : (
+              <span className="opacity-60">…</span>
+            )}
+            <ThemeToggle />
             <button
               type="button"
               onClick={logout}

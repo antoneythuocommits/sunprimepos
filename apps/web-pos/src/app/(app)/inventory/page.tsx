@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { Product } from '@sunprime/shared';
-import { AppShell } from '@/components/AppShell';
+import { useAuth } from '@/components/AuthProvider';
 import { useProgress } from '@/components/ProgressDialog';
 import { api, money } from '@/lib/api';
 
@@ -13,10 +13,13 @@ const emptyForm = {
   selling_price: '',
   stock_quantity: '0',
   unit: 'pcs',
+  category: 'general',
 };
 
 export default function InventoryPage() {
+  const { user } = useAuth();
   const { withProgress } = useProgress();
+  const isAdmin = user?.role === 'admin';
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(emptyForm);
@@ -25,8 +28,9 @@ export default function InventoryPage() {
   const [delta, setDelta] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const skipSearchEffect = useRef(true);
 
   async function load(q = search, silent = false) {
     const run = async () => {
@@ -48,17 +52,17 @@ export default function InventoryPage() {
   }
 
   useEffect(() => {
-    void withProgress(
-      Promise.all([
-        api<{ user: { role: string } }>('/me').then((r) => setIsAdmin(r.user.role === 'admin')),
-        load('', true),
-      ]).catch((e) => setError(e.message)),
-      'Loading inventory…',
-    );
+    void load('', false)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load inventory'))
+      .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (skipSearchEffect.current) {
+      skipSearchEffect.current = false;
+      return;
+    }
     const t = setTimeout(() => {
       load(search, true).catch(() => undefined);
     }, 150);
@@ -76,6 +80,7 @@ export default function InventoryPage() {
       selling_price: Number(form.selling_price),
       stock_quantity: Number(form.stock_quantity),
       unit: form.unit,
+      category: form.category,
     };
     try {
       await withProgress(
@@ -119,7 +124,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="grid lg:grid-cols-[1fr_360px] gap-4">
         <section className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
@@ -137,11 +142,13 @@ export default function InventoryPage() {
             </div>
           </div>
           {error && <p className="text-sm text-red-700 mb-2">{error}</p>}
+          {loading && <p className="text-sm text-[var(--muted)] mb-2">Loading inventory…</p>}
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[var(--muted)] border-b border-[var(--line)]">
                   <th className="py-2">Name</th>
+                  <th>Category</th>
                   <th>Stock</th>
                   {isAdmin && <th>Buy</th>}
                   <th>Sell</th>
@@ -155,6 +162,7 @@ export default function InventoryPage() {
                       {p.name}
                       <div className="text-xs text-[var(--muted)]">{p.sku}</div>
                     </td>
+                    <td className="capitalize">{p.category || 'general'}</td>
                     <td>
                       {p.stock_quantity} {p.unit}
                     </td>
@@ -174,6 +182,7 @@ export default function InventoryPage() {
                               selling_price: String(p.selling_price),
                               stock_quantity: String(p.stock_quantity),
                               unit: p.unit,
+                              category: p.category || 'general',
                             });
                           }}
                         >
@@ -215,6 +224,20 @@ export default function InventoryPage() {
                   </div>
                 ),
               )}
+              <div>
+                <label className="text-xs uppercase tracking-wide text-[var(--muted)]">Category</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="w-full mt-1 rounded-lg border border-[var(--line)] px-3 py-2"
+                >
+                  <option value="general">General</option>
+                  <option value="fegi">Fegi</option>
+                  {form.category && form.category !== 'general' && form.category !== 'fegi' && (
+                    <option value={form.category}>{form.category}</option>
+                  )}
+                </select>
+              </div>
               <div className="flex gap-2">
                 {editing && (
                   <button
@@ -241,7 +264,7 @@ export default function InventoryPage() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <form
             onSubmit={adjustStock}
-            className="bg-white rounded-xl w-full max-w-md p-5 space-y-3 shadow-xl"
+            className="bg-[var(--dialog)] rounded-xl w-full max-w-md p-5 space-y-3 shadow-xl"
           >
             <h2 className="font-semibold">Adjust stock — {stockProduct.name}</h2>
             <p className="text-sm text-[var(--muted)]">
@@ -272,6 +295,6 @@ export default function InventoryPage() {
           </form>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

@@ -2,12 +2,17 @@ import {
   createProductSchema,
   stockAdjustSchema,
   updateProductSchema,
+  normalizeProductCategory,
   roundMoney,
   type InventoryValuation,
   type Product,
 } from '@sunprime/shared';
 import { pool, toNumber, withTransaction } from '../db.js';
 import { HttpError } from '../middleware/error.js';
+
+function escapeIlike(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
 
 function mapProduct(row: Record<string, unknown>, includeBuying: boolean): Product {
   return {
@@ -18,6 +23,7 @@ function mapProduct(row: Record<string, unknown>, includeBuying: boolean): Produ
     selling_price: toNumber(row.selling_price),
     stock_quantity: toNumber(row.stock_quantity),
     unit: String(row.unit),
+    category: normalizeProductCategory(row.category ? String(row.category) : null),
     is_active: Boolean(row.is_active),
     allow_negative_stock: Boolean(row.allow_negative_stock),
     created_at: new Date(String(row.created_at)).toISOString(),
@@ -35,10 +41,21 @@ export async function listProducts(params: {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
   const values: unknown[] = [];
   const where: string[] = ['1=1'];
+  const orderBy: string[] = [];
 
   if (params.search) {
-    values.push(`%${params.search}%`);
-    where.push(`(name ILIKE $${values.length} OR COALESCE(sku, '') ILIKE $${values.length})`);
+    const term = params.search.trim();
+    values.push(term);
+    const exactIdx = values.length;
+    values.push(`%${escapeIlike(term)}%`);
+    const likeIdx = values.length;
+    // Exact SKU uses products_sku_lower_idx; substring uses pg_trgm GIN indexes.
+    where.push(
+      `(LOWER(sku) = LOWER($${exactIdx}) OR name ILIKE $${likeIdx} ESCAPE '\\' OR sku ILIKE $${likeIdx} ESCAPE '\\')`,
+    );
+    orderBy.push(
+      `CASE WHEN sku IS NOT NULL AND LOWER(sku) = LOWER($${exactIdx}) THEN 0 WHEN sku ILIKE $${likeIdx} ESCAPE '\\' THEN 1 ELSE 2 END`,
+    );
   }
   if (params.active !== undefined) {
     values.push(params.active);
@@ -49,9 +66,10 @@ export async function listProducts(params: {
     where.push(`name > $${values.length}`);
   }
 
+  orderBy.push('name ASC');
   values.push(limit + 1);
   const result = await pool.query(
-    `SELECT * FROM products WHERE ${where.join(' AND ')} ORDER BY name ASC LIMIT $${values.length}`,
+    `SELECT * FROM products WHERE ${where.join(' AND ')} ORDER BY ${orderBy.join(', ')} LIMIT $${values.length}`,
     values,
   );
   const rows = result.rows.slice(0, limit);
@@ -69,7 +87,7 @@ export async function getProductBySku(
   if (!trimmed) return null;
   const result = await pool.query(
     `SELECT * FROM products
-     WHERE is_active = TRUE AND LOWER(COALESCE(sku, '')) = LOWER($1)
+     WHERE is_active = TRUE AND sku IS NOT NULL AND LOWER(sku) = LOWER($1)
      LIMIT 1`,
     [trimmed],
   );
@@ -81,8 +99,8 @@ export async function createProduct(raw: unknown, includeBuying: boolean): Promi
   const input = createProductSchema.parse(raw);
   const result = await pool.query(
     `INSERT INTO products (
-       name, sku, buying_price, selling_price, stock_quantity, unit, is_active, allow_negative_stock
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       name, sku, buying_price, selling_price, stock_quantity, unit, category, is_active, allow_negative_stock
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      RETURNING *`,
     [
       input.name,
@@ -91,6 +109,7 @@ export async function createProduct(raw: unknown, includeBuying: boolean): Promi
       roundMoney(input.selling_price),
       input.stock_quantity,
       input.unit,
+      normalizeProductCategory(input.category),
       input.is_active,
       input.allow_negative_stock,
     ],
@@ -111,8 +130,8 @@ export async function updateProduct(
   const result = await pool.query(
     `UPDATE products SET
        name = $1, sku = $2, buying_price = $3, selling_price = $4,
-       unit = $5, is_active = $6, allow_negative_stock = $7, updated_at = NOW()
-     WHERE id = $8
+       unit = $5, category = $6, is_active = $7, allow_negative_stock = $8, updated_at = NOW()
+     WHERE id = $9
      RETURNING *`,
     [
       input.name ?? current.name,
@@ -120,6 +139,7 @@ export async function updateProduct(
       input.buying_price !== undefined ? roundMoney(input.buying_price) : current.buying_price,
       input.selling_price !== undefined ? roundMoney(input.selling_price) : current.selling_price,
       input.unit ?? current.unit,
+      input.category !== undefined ? normalizeProductCategory(input.category) : current.category,
       input.is_active ?? current.is_active,
       input.allow_negative_stock ?? current.allow_negative_stock,
       id,

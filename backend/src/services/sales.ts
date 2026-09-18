@@ -3,8 +3,9 @@ import {
   computeChange,
   computeSaleTotals,
   createSaleSchema,
-  lineTotal,
+  priceSaleLine,
   roundMoney,
+  roundQuantity,
   SaleType,
   type CreateSaleInput,
   type CreditSettlementReceipt,
@@ -73,7 +74,7 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
 
     for (const item of input.items) {
       const productRes = await client.query(
-        `SELECT id, name, buying_price, selling_price, stock_quantity, allow_negative_stock, is_active
+        `SELECT id, name, buying_price, selling_price, stock_quantity, allow_negative_stock, is_active, category
          FROM products WHERE id = $1 FOR UPDATE`,
         [item.product_id],
       );
@@ -82,11 +83,14 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
         throw new HttpError(400, `Product not found or inactive: ${item.product_id}`);
       }
 
-      const qty = roundMoney(item.quantity);
-      const unitPrice = roundMoney(item.unit_price);
+      const priced = priceSaleLine({
+        category: product.category ? String(product.category) : null,
+        quantity: item.quantity,
+        entered_price: item.unit_price,
+      });
       const buyingPrice = toNumber(product.buying_price);
       const currentStock = toNumber(product.stock_quantity);
-      const newStock = roundMoney(currentStock - qty);
+      const newStock = roundQuantity(currentStock - priced.quantity);
 
       if (newStock < 0 && !product.allow_negative_stock) {
         throw new HttpError(400, `Insufficient stock for ${product.name}`);
@@ -100,10 +104,10 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
       lineSnapshots.push({
         product_id: product.id,
         product_name: product.name,
-        quantity: qty,
-        unit_price: unitPrice,
+        quantity: priced.quantity,
+        unit_price: priced.unit_price,
         buying_price: buyingPrice,
-        line_total: lineTotal(qty, unitPrice),
+        line_total: priced.line_total,
       });
     }
 
@@ -200,7 +204,7 @@ export async function listSales(params: {
 
   values.push(limit + 1);
   const result = await pool.query(
-    `SELECT s.*, c.name AS customer_name, u.email AS cashier_email
+    `SELECT s.*, c.name AS customer_name, COALESCE(u.username, u.email) AS cashier_email
      FROM sales s
      LEFT JOIN customers c ON c.id = s.customer_id
      LEFT JOIN app_users u ON u.id = s.cashier_id
@@ -225,7 +229,7 @@ export async function listSales(params: {
 
 export async function getSale(id: string): Promise<SaleWithItems> {
   const result = await pool.query(
-    `SELECT s.*, c.name AS customer_name, u.email AS cashier_email
+    `SELECT s.*, c.name AS customer_name, COALESCE(u.username, u.email) AS cashier_email
      FROM sales s
      LEFT JOIN customers c ON c.id = s.customer_id
      LEFT JOIN app_users u ON u.id = s.cashier_id

@@ -1,5 +1,6 @@
 import {
   createUserSchema,
+  loginSchema,
   updateUserSchema,
   updateSettingsSchema,
   UserRole,
@@ -7,12 +8,15 @@ import {
   type AppUser,
 } from '@sunprime/shared';
 import { pool } from '../db.js';
-import { getSupabaseAdmin } from '../middleware/auth.js';
+import { getSupabaseAdmin, getSupabaseAnon, invalidateAppUserCache } from '../middleware/auth.js';
 import { HttpError } from '../middleware/error.js';
+
+const USERNAME_EMAIL_DOMAIN = 'pos.sunprime.local';
 
 function mapUser(row: Record<string, unknown>): AppUser {
   return {
     id: String(row.id),
+    username: String(row.username),
     email: String(row.email),
     role: row.role as UserRole,
     is_active: Boolean(row.is_active),
@@ -20,16 +24,64 @@ function mapUser(row: Record<string, unknown>): AppUser {
   };
 }
 
+function toInternalEmail(username: string): string {
+  return `${username.trim().toLowerCase()}@${USERNAME_EMAIL_DOMAIN}`;
+}
+
 export async function listUsers(): Promise<AppUser[]> {
   const result = await pool.query(`SELECT * FROM app_users ORDER BY created_at ASC`);
   return result.rows.map(mapUser);
 }
 
+export async function loginWithUsername(raw: unknown) {
+  const input = loginSchema.parse(raw);
+  const identifier = input.username.trim();
+  const result = await pool.query(
+    `SELECT id, username, email, role, is_active, created_at
+     FROM app_users
+     WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)
+     LIMIT 1`,
+    [identifier],
+  );
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row || !row.is_active) {
+    throw new HttpError(401, 'Invalid username or password');
+  }
+
+  const anon = getSupabaseAnon();
+  const { data, error } = await anon.auth.signInWithPassword({
+    email: String(row.email),
+    password: input.password,
+  });
+  if (error || !data.session) {
+    throw new HttpError(401, 'Invalid username or password');
+  }
+
+  return {
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    expires_in: data.session.expires_in,
+    token_type: 'bearer',
+    user: mapUser(row),
+  };
+}
+
 export async function createUser(raw: unknown): Promise<AppUser> {
   const input = createUserSchema.parse(raw);
+  const username = input.username.trim();
+  const email = toInternalEmail(username);
+
+  const taken = await pool.query(
+    `SELECT 1 FROM app_users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)`,
+    [username, email],
+  );
+  if (taken.rowCount) {
+    throw new HttpError(409, 'Username already exists');
+  }
+
   const admin = getSupabaseAdmin();
   const { data, error } = await admin.auth.admin.createUser({
-    email: input.email,
+    email,
     password: input.password,
     email_confirm: true,
   });
@@ -37,14 +89,19 @@ export async function createUser(raw: unknown): Promise<AppUser> {
     throw new HttpError(400, error?.message ?? 'Failed to create user');
   }
 
-  const result = await pool.query(
-    `INSERT INTO app_users (id, email, role, is_active)
-     VALUES ($1, $2, $3, TRUE)
-     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role
-     RETURNING *`,
-    [data.user.id, input.email, input.role],
-  );
-  return mapUser(result.rows[0]);
+  try {
+    const result = await pool.query(
+      `INSERT INTO app_users (id, username, email, role, is_active)
+       VALUES ($1, $2, $3, $4, TRUE)
+       ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, email = EXCLUDED.email, role = EXCLUDED.role
+       RETURNING *`,
+      [data.user.id, username, email, input.role],
+    );
+    return mapUser(result.rows[0]);
+  } catch (err) {
+    await admin.auth.admin.deleteUser(data.user.id).catch(() => undefined);
+    throw err;
+  }
 }
 
 export async function updateUser(id: string, raw: unknown): Promise<AppUser> {
@@ -57,6 +114,8 @@ export async function updateUser(id: string, raw: unknown): Promise<AppUser> {
     const { error } = await admin.auth.admin.updateUserById(id, { password: input.password });
     if (error) throw new HttpError(400, error.message);
   }
+
+  invalidateAppUserCache(id);
 
   const result = await pool.query(
     `UPDATE app_users SET

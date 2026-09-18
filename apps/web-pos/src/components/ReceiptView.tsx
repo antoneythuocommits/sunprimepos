@@ -1,36 +1,31 @@
 'use client';
 
 import type { CreditSettlementReceipt, SaleWithItems } from '@sunprime/shared';
+import { formatQuantityDisplay } from '@sunprime/shared';
 import { money } from '@/lib/api';
 
-/** POS-80C thermal: 80mm paper ≈ 42 monospace columns */
-const COLS = 42;
-
-function center(text: string, width = COLS): string {
-  const pad = Math.max(0, width - text.length);
-  const left = Math.floor(pad / 2);
-  return `${' '.repeat(left)}${text}${' '.repeat(pad - left)}`;
-}
-
-function padLine(left: string, right: string, width = COLS): string {
-  const gap = Math.max(1, width - left.length - right.length);
-  return `${left}${' '.repeat(gap)}${right}`;
-}
-
-function dash(): string {
-  return '-'.repeat(COLS);
-}
-
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(0, max - 1))}.`;
-}
-
-function ReceiptBody({ lines }: { lines: string[] }) {
+function Row({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value?: string;
+  strong?: boolean;
+}) {
   return (
-    <pre className="receipt-print receipt-pos80c" id="receipt">
-      {lines.join('\n')}
-    </pre>
+    <div className={`receipt-row${strong ? ' receipt-row-strong' : ''}`}>
+      <span className="receipt-label">{label}</span>
+      {value != null && <span className="receipt-amt">{value}</span>}
+    </div>
+  );
+}
+
+function ReceiptShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="receipt-print receipt-pos80c" id="receipt">
+      {children}
+    </div>
   );
 }
 
@@ -53,65 +48,64 @@ export function ReceiptView(props: Props) {
 
   if (props.kind === 'settlement') {
     const s = props.settlement;
-    const lines: string[] = [
-      center('SALE RECEIPT'),
-      center(contact),
-      dash(),
-      `Settlement: ${s.receipt_number}`,
-      `Customer: ${truncate(s.customer.name, COLS - 10)}`,
-      new Date(s.created_at).toLocaleString(),
-      dash(),
-      padLine('Paid', money(s.paid_amount)),
-    ];
-
-    for (const o of s.orders) {
-      lines.push(padLine(truncate(`Order ${o.receipt_number}`, 26), `-${money(o.amount_allocated)}`));
-      for (const it of o.items) {
-        lines.push(
-          padLine(` ${truncate(it.product_name, 20)} x${it.quantity}`, money(it.line_total)),
-        );
-      }
-      lines.push(padLine(' Bal', money(o.remaining_balance)));
-    }
-
-    lines.push(dash(), padLine('Remaining debt', money(s.total_remaining_debt)), dash(), center('Thank you'));
-    return <ReceiptBody lines={lines} />;
+    return (
+      <ReceiptShell>
+        <div className="receipt-title">SALE RECEIPT</div>
+        <div className="receipt-contact">{contact}</div>
+        <div className="receipt-rule" />
+        <Row label={`Settlement: ${s.receipt_number}`} />
+        <Row label={`Customer: ${s.customer.name}`} />
+        <Row label={new Date(s.created_at).toLocaleString()} />
+        <div className="receipt-rule" />
+        <Row label="Paid" value={money(s.paid_amount)} strong />
+        {s.orders.map((o) => (
+          <div key={o.sale_id} className="receipt-block">
+            <Row label={`Order ${o.receipt_number}`} value={`-${money(o.amount_allocated)}`} />
+            {o.items.map((it) => (
+              <Row
+                key={it.id}
+                label={`${it.product_name} x${formatQuantityDisplay(it.quantity)}`}
+                value={money(it.line_total)}
+              />
+            ))}
+            <Row label="Balance" value={money(o.remaining_balance)} />
+          </div>
+        ))}
+        <div className="receipt-rule" />
+        <Row label="Remaining debt" value={money(s.total_remaining_debt)} strong />
+        <div className="receipt-rule" />
+        <div className="receipt-thanks">Thank you</div>
+      </ReceiptShell>
+    );
   }
 
   const sale = props.sale;
-  const lines: string[] = [
-    center('SALE RECEIPT'),
-    center(contact),
-    dash(),
-    `Receipt: ${sale.receipt_number}`,
-    new Date(sale.created_at).toLocaleString(),
-  ];
-
-  if (sale.sale_type === 'credit' && sale.customer_name) {
-    lines.push(`Customer: ${truncate(sale.customer_name, COLS - 10)}`);
-  }
-
-  lines.push(dash());
-
-  for (const it of sale.items) {
-    lines.push(truncate(it.product_name, COLS));
-    lines.push(padLine(`${it.quantity} x ${money(it.unit_price)}`, money(it.line_total)));
-  }
-
-  lines.push(
-    dash(),
-    padLine('TOTAL', money(sale.total_amount)),
-    padLine('Paid', money(sale.paid_amount)),
-    padLine('Change', money(sale.change_amount)),
+  return (
+    <ReceiptShell>
+      <div className="receipt-title">SALE RECEIPT</div>
+      <div className="receipt-contact">{contact}</div>
+      <div className="receipt-rule" />
+      <Row label={`Receipt: ${sale.receipt_number}`} />
+      <Row label={new Date(sale.created_at).toLocaleString()} />
+      {sale.sale_type === 'credit' && sale.customer_name && (
+        <Row label={`Customer: ${sale.customer_name}`} />
+      )}
+      <div className="receipt-rule" />
+      {sale.items.map((it) => (
+        <div key={it.id} className="receipt-block">
+          <div className="receipt-item-name">{it.product_name}</div>
+          <Row label={`${formatQuantityDisplay(it.quantity)} x ${money(it.unit_price)}`} value={money(it.line_total)} />
+        </div>
+      ))}
+      <div className="receipt-rule" />
+      <Row label="TOTAL" value={money(sale.total_amount)} strong />
+      <Row label="Paid" value={money(sale.paid_amount)} strong />
+      <Row label="Change" value={money(sale.change_amount)} strong />
+      {sale.sale_type === 'credit' && <div className="receipt-flag">CREDIT SALE</div>}
+      <div className="receipt-rule" />
+      <div className="receipt-thanks">Thank you</div>
+    </ReceiptShell>
   );
-
-  if (sale.sale_type === 'credit') {
-    lines.push('', 'CREDIT SALE');
-  }
-
-  lines.push(dash(), center('Thank you'));
-
-  return <ReceiptBody lines={lines} />;
 }
 
 export function printReceipt() {

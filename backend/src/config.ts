@@ -16,5 +16,5 @@ export const env = {
 };
 
 export function isSupabaseConfigured(): boolean {
-  return Boolean(env.supabaseUrl && env.supabaseServiceRoleKey && env.databaseUrl);
+  return Boolean(env.supabaseUrl && env.supabaseAnonKey && env.supabaseServiceRoleKey && env.databaseUrl);
 }

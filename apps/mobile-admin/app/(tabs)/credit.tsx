@@ -13,6 +13,7 @@ import type {
   Customer,
   CustomerCreditSummary,
 } from '@sunprime/shared';
+import { formatQuantityDisplay } from '@sunprime/shared';
 import { api, money } from '../../src/lib/api';
 
 export default function CreditScreen() {
@@ -79,7 +80,7 @@ export default function CreditScreen() {
               </Text>
               {o.items.map((it) => (
                 <Text key={it.id} style={styles.muted}>
-                  {it.product_name} × {it.quantity} = {money(it.line_total)}
+                  {it.product_name} × {formatQuantityDisplay(it.quantity)} = {money(it.line_total)}
                 </Text>
               ))}
             </View>

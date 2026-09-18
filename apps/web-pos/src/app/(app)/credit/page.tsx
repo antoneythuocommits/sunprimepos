@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import type { CreditSettlementReceipt, Customer, CustomerCreditSummary } from '@sunprime/shared';
-import { AppShell } from '@/components/AppShell';
+import { formatQuantityDisplay } from '@sunprime/shared';
 import { useProgress } from '@/components/ProgressDialog';
 import { printReceipt, ReceiptView } from '@/components/ReceiptView';
 import { api, money } from '@/lib/api';
@@ -17,6 +17,7 @@ export default function CreditPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function loadCustomers() {
     const r = await api<{ customers: (Customer & { outstanding?: number })[] }>('/customers');
@@ -35,7 +36,9 @@ export default function CreditPage() {
   }
 
   useEffect(() => {
-    void withProgress(loadCustomers(), 'Loading customers…').catch((e) => setError(e.message));
+    void withProgress(loadCustomers(), 'Loading customers…')
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load customers'))
+      .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -84,7 +87,6 @@ export default function CreditPage() {
   }
 
   return (
-    <AppShell>
       <div className="grid lg:grid-cols-[320px_1fr] gap-4">
         <aside className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4 space-y-4">
           <h1 className="font-semibold text-lg">Customers</h1>
@@ -106,6 +108,7 @@ export default function CreditPage() {
               Add customer
             </button>
           </form>
+          {loading && <p className="text-sm text-[var(--muted)]">Loading customers…</p>}
           <ul className="max-h-[60vh] overflow-auto divide-y divide-[var(--line)]">
             {customers.map((c) => (
               <li key={c.id}>
@@ -169,7 +172,7 @@ export default function CreditPage() {
                     {o.items.map((it) => (
                       <div key={it.id} className="flex justify-between text-sm text-[var(--muted)]">
                         <span>
-                          {it.product_name} × {it.quantity}
+                          {it.product_name} × {formatQuantityDisplay(it.quantity)}
                         </span>
                         <span>{money(it.line_total)}</span>
                       </div>
@@ -196,6 +199,5 @@ export default function CreditPage() {
           )}
         </section>
       </div>
-    </AppShell>
   );
 }

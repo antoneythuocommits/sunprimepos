@@ -2,15 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Customer, Product, SaleWithItems } from '@sunprime/shared';
+import { formatQuantityDisplay, isFegiCategory, priceSaleLine } from '@sunprime/shared';
 import { api, money } from '@/lib/api';
 import { printReceipt, ReceiptView } from '@/components/ReceiptView';
 import { useProgress } from '@/components/ProgressDialog';
+import { clearPosCache, readPosCache, writePosCache } from '@/lib/posCache';
 
 interface CartLine {
   key: string;
   product: Product;
   quantity: number;
-  unit_price: number;
+  quantity_display: string;
+  entered_price: number;
+}
+
+function pricedLine(line: CartLine) {
+  return priceSaleLine({
+    category: line.product.category,
+    quantity: line.quantity,
+    entered_price: line.entered_price,
+  });
+}
+
+/** Handheld scanners dump compact codes then Enter — skip slow name search for those. */
+function looksLikeBarcode(term: string): boolean {
+  const t = term.trim();
+  if (!t || /\s/.test(t)) return false;
+  if (/^\d{4,}$/.test(t)) return true;
+  return /^[A-Za-z0-9._-]{6,}$/.test(t) && /\d/.test(t);
 }
 
 function MessageBox({
@@ -25,7 +44,7 @@ function MessageBox({
       <div
         role="alertdialog"
         aria-modal="true"
-        className="bg-white rounded-xl w-full max-w-sm p-5 shadow-xl space-y-4"
+        className="bg-[var(--dialog)] rounded-xl w-full max-w-sm p-5 shadow-xl space-y-4"
       >
         <p className="text-base font-medium text-[var(--brand-dark)]">{message}</p>
         <button
@@ -64,6 +83,7 @@ export function PosTerminal() {
   const [saleType, setSaleType] = useState<'cash' | 'credit'>('cash');
   const [paid, setPaid] = useState('');
   const [printOnComplete, setPrintOnComplete] = useState(false);
+  const [cacheReady, setCacheReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,11 +98,11 @@ export function PosTerminal() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const grandTotal = useMemo(
-    () => cart.reduce((sum, l) => sum + l.quantity * l.unit_price, 0),
+    () => cart.reduce((sum, l) => sum + pricedLine(l).line_total, 0),
     [cart],
   );
   const paidNum = Number(paid) || 0;
-  const change = Math.max(0, Math.round((paidNum - grandTotal) * 100) / 100);
+  const change = Math.round((paidNum - grandTotal) * 100) / 100;
   const canCompleteCash = saleType === 'credit' || paidNum + 1e-9 >= grandTotal;
   const canComplete = !busy && cart.length > 0 && canCompleteCash;
 
@@ -91,19 +111,47 @@ export function PosTerminal() {
   }, []);
 
   useEffect(() => {
+    const saved = readPosCache();
+    if (saved) {
+      setCart(saved.cart);
+      setSaleType(saved.saleType);
+      setPaid(saved.paid);
+      setPrintOnComplete(saved.printOnComplete);
+      setSelectedCustomer(saved.selectedCustomer);
+    }
+    setCacheReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!cacheReady) return;
+    writePosCache({
+      cart,
+      saleType,
+      paid,
+      printOnComplete,
+      selectedCustomer,
+    });
+  }, [cacheReady, cart, saleType, paid, printOnComplete, selectedCustomer]);
+
+  useEffect(() => {
     focusSearch();
   }, [focusSearch]);
 
   useEffect(() => {
-    if (!query.trim()) {
+    const term = query.trim();
+    if (!term) {
       setResults([]);
       setSearching(false);
       return;
     }
-    setSearching(true);
+    // Scanners finish (and send Enter) well under 400ms; cashiers typing names still get suggestions.
+    const barcodeLike = looksLikeBarcode(term);
+    const delay = barcodeLike ? 400 : 120;
+    if (!barcodeLike) setSearching(true);
     const t = setTimeout(() => {
+      setSearching(true);
       api<{ products: Product[] }>(
-        `/products?search=${encodeURIComponent(query)}&active=true&limit=20`,
+        `/products?search=${encodeURIComponent(term)}&active=true&limit=20`,
       )
         .then((r) => {
           setResults(r.products);
@@ -111,7 +159,7 @@ export function PosTerminal() {
         })
         .catch(() => setResults([]))
         .finally(() => setSearching(false));
-    }, 120);
+    }, delay);
     return () => clearTimeout(t);
   }, [query]);
 
@@ -124,7 +172,7 @@ export function PosTerminal() {
     if (dialogProduct) {
       setQty('1');
       const existing = cart.find((l) => l.product.id === dialogProduct.id);
-      setPrice(String(existing?.unit_price ?? dialogProduct.selling_price));
+      setPrice(String(existing?.entered_price ?? dialogProduct.selling_price));
       requestAnimationFrame(() => {
         qtyRef.current?.focus();
         qtyRef.current?.select();
@@ -144,20 +192,23 @@ export function PosTerminal() {
   function addToCart() {
     if (!dialogProduct) return;
     const quantity = Number(qty);
-    const unit_price = Number(price);
-    if (!(quantity > 0) || !(unit_price >= 0)) {
+    const entered_price = Number(price);
+    if (!(quantity > 0) || !(entered_price >= 0)) {
       setError('Enter a valid quantity and price');
       return;
     }
+    const quantity_display = formatQuantityDisplay(quantity, qty);
     setCart((prev) => {
       const existingIdx = prev.findIndex((l) => l.product.id === dialogProduct.id);
       if (existingIdx >= 0) {
         const next = [...prev];
         const existing = next[existingIdx];
+        const mergedQty = existing.quantity + quantity;
         next[existingIdx] = {
           ...existing,
-          quantity: existing.quantity + quantity,
-          unit_price,
+          quantity: mergedQty,
+          quantity_display: formatQuantityDisplay(mergedQty),
+          entered_price,
         };
         return next;
       }
@@ -167,7 +218,8 @@ export function PosTerminal() {
           key: dialogProduct.id,
           product: dialogProduct,
           quantity,
-          unit_price,
+          quantity_display,
+          entered_price,
         },
       ];
     });
@@ -179,6 +231,8 @@ export function PosTerminal() {
   async function resolveSkuOrSelection() {
     const term = query.trim();
     if (!term) return;
+
+    const barcodeLike = looksLikeBarcode(term);
 
     // Prefer exact SKU match from current results (fast path for scanners)
     const fromResults = results.find(
@@ -194,8 +248,8 @@ export function PosTerminal() {
       const product = await api<Product>(`/products/by-sku/${encodeURIComponent(term)}`);
       openProduct(product);
     } catch {
-      // Fall back to highlighted name-search result when not an exact SKU
-      if (results.length > 0) {
+      // Name search only — never pick a suggestion after a failed barcode scan
+      if (!barcodeLike && results.length > 0) {
         openProduct(results[highlight] ?? results[0]);
         return;
       }
@@ -282,7 +336,7 @@ export function PosTerminal() {
           items: cart.map((l) => ({
             product_id: l.product.id,
             quantity: l.quantity,
-            unit_price: l.unit_price,
+            unit_price: l.entered_price,
           })),
           sale_type: saleType,
           paid_amount: saleType === 'credit' ? 0 : paidNum,
@@ -295,6 +349,7 @@ export function PosTerminal() {
       setPaid('');
       setNeedCustomer(false);
       setSelectedCustomer(null);
+      clearPosCache();
       if (printOnComplete) {
         setTimeout(() => printReceipt(), 200);
       }
@@ -329,7 +384,7 @@ export function PosTerminal() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onSearchKeyDown}
             placeholder="Search name or scan SKU… (Enter)"
-            className="w-full rounded-lg border border-[var(--line)] bg-white px-3 py-3 pr-10 text-base outline-none focus:ring-2 focus:ring-[var(--brand)]"
+            className="w-full rounded-lg border border-[var(--line)] bg-[var(--field)] px-3 py-3 pr-10 text-base outline-none focus:ring-2 focus:ring-[var(--brand)]"
             autoComplete="off"
             disabled={skuLookupBusy}
           />
@@ -340,7 +395,7 @@ export function PosTerminal() {
             />
           )}
           {results.length > 0 && (
-            <ul className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded-lg border border-[var(--line)] bg-white shadow-lg">
+            <ul className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded-lg border border-[var(--line)] bg-[var(--dialog)] shadow-lg">
               {results.map((p, i) => (
                 <li key={p.id}>
                   <button
@@ -355,6 +410,7 @@ export function PosTerminal() {
                       {p.name}
                       <span className="opacity-70 text-sm ml-2">
                         {p.stock_quantity} {p.unit}
+                        {isFegiCategory(p.category) ? ' · fegi' : ''}
                       </span>
                     </span>
                     <span className="font-medium">{money(p.selling_price)}</span>
@@ -366,37 +422,48 @@ export function PosTerminal() {
         </div>
 
         <div className="mt-4 overflow-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-base">
             <thead>
-              <tr className="text-left text-[var(--muted)] border-b border-[var(--line)]">
-                <th className="py-2">Item</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
+              <tr className="text-left text-[var(--brand-dark)]/70 border-b-2 border-[var(--line)]">
+                <th className="py-3 pr-3 text-sm font-semibold uppercase tracking-wide">Item</th>
+                <th className="py-3 pr-3 text-sm font-semibold uppercase tracking-wide">Qty</th>
+                <th className="py-3 pr-3 text-sm font-semibold uppercase tracking-wide">Price</th>
+                <th className="py-3 pr-3 text-sm font-semibold uppercase tracking-wide">Total</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {cart.map((line) => (
-                <tr key={line.key} className="border-b border-[var(--line)]/60">
-                  <td className="py-2">{line.product.name}</td>
-                  <td>{line.quantity}</td>
-                  <td>{money(line.unit_price)}</td>
-                  <td>{money(line.quantity * line.unit_price)}</td>
-                  <td>
+              {cart.map((line) => {
+                const priced = pricedLine(line);
+                return (
+                <tr key={line.key} className="border-b border-[var(--line)]">
+                  <td className="py-3.5 pr-3 text-lg font-bold leading-tight text-[var(--brand-dark)]">
+                    {line.product.name}
+                  </td>
+                  <td className="py-3.5 pr-3 text-lg font-semibold tabular-nums">
+                    {line.quantity_display}
+                  </td>
+                  <td className="py-3.5 pr-3 text-lg font-semibold tabular-nums">
+                    {money(priced.unit_price)}
+                  </td>
+                  <td className="py-3.5 pr-3 text-lg font-bold tabular-nums text-[var(--brand-dark)]">
+                    {money(priced.line_total)}
+                  </td>
+                  <td className="py-3.5">
                     <button
                       type="button"
-                      className="text-red-700 text-xs"
+                      className="text-red-700 text-sm font-medium"
                       onClick={() => setCart((c) => c.filter((x) => x.key !== line.key))}
                     >
                       Remove
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {!cart.length && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-[var(--muted)]">
+                  <td colSpan={5} className="py-10 text-center text-base text-[var(--muted)]">
                     Cart is empty — search and add products
                   </td>
                 </tr>
@@ -448,9 +515,9 @@ export function PosTerminal() {
               className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2"
               placeholder="0.00"
             />
-            <div className="mt-3 rounded-lg bg-[var(--brand-dark)] text-white px-4 py-3">
+            <div className="mt-3 rounded-lg bg-[var(--brand)] text-white px-4 py-3">
               <div className="text-xs uppercase tracking-wider opacity-80">Change</div>
-              <div className="text-3xl font-semibold">{money(change)}</div>
+              <div className="text-3xl font-semibold tabular-nums">{money(change)}</div>
             </div>
             {cart.length > 0 && !canCompleteCash && (
               <p className="text-xs text-red-700 mt-2">
@@ -495,17 +562,24 @@ export function PosTerminal() {
 
       {dialogProduct && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-5 shadow-xl space-y-4">
+          <div className="bg-[var(--dialog)] rounded-xl w-full max-w-md p-5 shadow-xl space-y-4">
             <h2 className="text-lg font-semibold">{dialogProduct.name}</h2>
             {dialogProduct.sku && (
               <p className="text-xs text-[var(--muted)]">SKU: {dialogProduct.sku}</p>
             )}
             <p className="text-sm text-[var(--muted)]">
               Default price: {money(dialogProduct.selling_price)} / {dialogProduct.unit}
+              {isFegiCategory(dialogProduct.category) ? ' · fegi' : ''}
             </p>
+            {isFegiCategory(dialogProduct.category) && (
+              <p className="text-xs text-[var(--muted)]">
+                Decimal qty (0.1) keeps price and totals units × price. Whole qty (1, 5) shows
+                price × 10.
+              </p>
+            )}
             {existingCartLine && (
               <p className="text-sm rounded-lg bg-[var(--bg)] border border-[var(--line)] px-3 py-2">
-                Already in cart: <strong>{existingCartLine.quantity}</strong> — adding more will
+                Already in cart: <strong>{existingCartLine.quantity_display}</strong> — adding more will
                 merge into one line.
               </p>
             )}
@@ -571,7 +645,7 @@ export function PosTerminal() {
 
       {needCustomer && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg p-5 shadow-xl space-y-4">
+          <div className="bg-[var(--dialog)] rounded-xl w-full max-w-lg p-5 shadow-xl space-y-4">
             <h2 className="text-lg font-semibold">Select customer for credit sale</h2>
             <input
               value={customerQuery}

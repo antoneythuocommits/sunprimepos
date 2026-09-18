@@ -16,4 +16,21 @@ config.resolver.extraNodeModules = {
   '@sunprime/shared': path.resolve(monorepoRoot, 'packages/shared'),
 };
 
+const upstreamResolve = config.resolver.resolveRequest;
+
+// @sunprime/shared uses NodeNext imports (`./types.js`) while the files are `types.ts`.
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName.startsWith('.') && moduleName.endsWith('.js')) {
+    try {
+      return context.resolveRequest(context, moduleName.replace(/\.js$/, '.ts'), platform);
+    } catch {
+      // Fall through to the real .js file when it exists.
+    }
+  }
+  if (upstreamResolve) {
+    return upstreamResolve(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;

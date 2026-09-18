@@ -16,6 +16,7 @@ export const createProductSchema = z.object({
   selling_price: z.number().finite().nonnegative(),
   stock_quantity: z.number().finite().default(0),
   unit: z.string().min(1).max(20).default('pcs'),
+  category: z.string().trim().max(50).optional(),
   is_active: z.boolean().default(true),
   allow_negative_stock: z.boolean().default(false),
 });
@@ -51,8 +52,23 @@ export const creditPaymentSchema = z.object({
   amount: z.number().finite().positive(),
 });
 
+export const usernameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(32)
+  .regex(
+    /^[a-zA-Z][a-zA-Z0-9._-]*$/,
+    'Username must start with a letter and use only letters, numbers, dots, underscores, or hyphens',
+  );
+
+export const loginSchema = z.object({
+  username: z.string().trim().min(1).max(100),
+  password: z.string().min(1).max(128),
+});
+
 export const createUserSchema = z.object({
-  email: z.string().email(),
+  username: usernameSchema,
   password: z.string().min(8).max(128),
   role: z.enum([UserRole.ADMIN, UserRole.CASHIER]),
 });
@@ -81,6 +97,7 @@ export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 export type CreditPaymentInput = z.infer<typeof creditPaymentSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
 export type ReportQueryInput = z.infer<typeof reportQuerySchema>;

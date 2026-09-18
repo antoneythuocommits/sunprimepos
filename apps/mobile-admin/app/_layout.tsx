@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { getSupabase, supabaseConfigured } from '../src/lib/supabase';
 import { api } from '../src/lib/api';
+import { OfflineOverlay } from '../src/components/OfflineOverlay';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -87,6 +88,7 @@ export default function RootLayout() {
         </View>
       )}
       <Stack screenOptions={{ headerShown: false }} />
+      <OfflineOverlay />
     </GestureHandlerRootView>
   );
 }

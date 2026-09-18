@@ -14,7 +14,9 @@
     "test": "turbo run test --filter=@sunprime/backend",
     "lint": "turbo run lint --filter=@sunprime/shared --filter=@sunprime/backend --filter=@sunprime/web-pos",
     "db:migrate": "pnpm --filter=@sunprime/backend db:migrate",
-    "db:seed": "pnpm --filter=@sunprime/backend db:seed"
+    "db:seed": "pnpm --filter=@sunprime/backend db:seed",
+    "db:import-inventory": "pnpm --filter=@sunprime/backend db:import-inventory",
+    "db:reset-live": "pnpm --filter=@sunprime/backend db:reset-live"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

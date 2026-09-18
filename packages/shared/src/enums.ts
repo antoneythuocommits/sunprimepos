@@ -21,3 +21,20 @@ export const ReportGroup = {
   RANGE: 'range',
 } as const;
 export type ReportGroup = (typeof ReportGroup)[keyof typeof ReportGroup];
+
+export const ProductCategory = {
+  GENERAL: 'general',
+  FEGI: 'fegi',
+} as const;
+export type ProductCategory = (typeof ProductCategory)[keyof typeof ProductCategory];
+
+export function normalizeProductCategory(raw?: string | null): string {
+  const value = (raw ?? '').trim();
+  if (!value) return ProductCategory.GENERAL;
+  if (value.toLowerCase() === ProductCategory.FEGI) return ProductCategory.FEGI;
+  return value.slice(0, 50);
+}
+
+export function isFegiCategory(raw?: string | null): boolean {
+  return (raw ?? '').trim().toLowerCase() === ProductCategory.FEGI;
+}

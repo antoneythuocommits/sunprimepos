@@ -14,7 +14,10 @@ async function main() {
     process.exit(1);
   }
 
-  const client = new pg.Client({ connectionString: databaseUrl });
+  const client = new pg.Client({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
+  });
   await client.connect();
 
   const migrationsDir = resolve(__dirname, '../../migrations');

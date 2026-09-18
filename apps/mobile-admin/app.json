@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.ant0ney.sunprimepos",
-      "versionCode": 2,
+      "versionCode": 4,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

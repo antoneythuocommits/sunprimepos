@@ -61,7 +61,7 @@ export default function InventoryScreen() {
         <Pressable key={p.id} style={styles.card} onPress={() => setSelected(p)}>
           <Text style={styles.name}>{p.name}</Text>
           <Text style={styles.muted}>
-            Stock: {p.stock_quantity} {p.unit} · Sell {money(p.selling_price)}
+            Stock: {p.stock_quantity} {p.unit} · {p.category || 'general'} · Sell {money(p.selling_price)}
           </Text>
         </Pressable>
       ))}

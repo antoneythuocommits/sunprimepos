@@ -6,6 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- App users mirrored from Supabase Auth (role + active flag)
 CREATE TABLE IF NOT EXISTS app_users (
   id UUID PRIMARY KEY, -- matches auth.users.id
+  username TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL CHECK (role IN ('admin', 'cashier')),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS products (
   selling_price NUMERIC(12, 2) NOT NULL CHECK (selling_price >= 0),
   stock_quantity NUMERIC(12, 3) NOT NULL DEFAULT 0,
   unit TEXT NOT NULL DEFAULT 'pcs',
+  category TEXT NOT NULL DEFAULT 'general',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   allow_negative_stock BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

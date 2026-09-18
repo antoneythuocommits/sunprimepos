@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "lint": "tsc -p tsconfig.json --noEmit",
     "build:apk": "eas build -p android --profile preview",
-    "build:aab": "eas build -p android --profile production"
+    "build:aab": "eas build -p android --profile production",
+    "eas-build-post-install": "pnpm --filter @sunprime/shared build"
   },
   "dependencies": {
     "@sunprime/shared": "workspace:*",

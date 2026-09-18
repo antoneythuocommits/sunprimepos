@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import type { SaleWithItems } from '@sunprime/shared';
-import { AppShell } from '@/components/AppShell';
 import { useProgress } from '@/components/ProgressDialog';
 import { printReceipt, ReceiptView } from '@/components/ReceiptView';
 import { api, money } from '@/lib/api';
@@ -12,16 +11,16 @@ export default function ReprintPage() {
   const [sales, setSales] = useState<SaleWithItems[]>([]);
   const [selected, setSelected] = useState<SaleWithItems | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void withProgress(
-      api<{ sales: SaleWithItems[] }>('/sales?limit=100')
-        .then((r) => setSales(r.sales))
-        .catch((e) => setError(e.message)),
+      api<{ sales: SaleWithItems[] }>('/sales?limit=100').then((r) => setSales(r.sales)),
       'Loading sales…',
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    )
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load sales'))
+      .finally(() => setLoading(false));
+  }, [withProgress]);
 
   async function selectSale(id: string) {
     await withProgress(
@@ -34,11 +33,11 @@ export default function ReprintPage() {
   }
 
   return (
-    <AppShell>
       <div className="grid lg:grid-cols-[1fr_320px] gap-4">
         <section className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4">
           <h1 className="text-lg font-semibold mb-3">Reprint receipts</h1>
           {error && <p className="text-sm text-red-700">{error}</p>}
+          {loading && <p className="text-sm text-[var(--muted)] mb-2">Loading sales…</p>}
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[var(--muted)] border-b">
@@ -83,6 +82,5 @@ export default function ReprintPage() {
           )}
         </aside>
       </div>
-    </AppShell>
   );
 }

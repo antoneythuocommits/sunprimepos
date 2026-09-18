@@ -3,22 +3,40 @@ import { UserRole } from '@sunprime/shared';
 import { isSupabaseConfigured } from './config.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { asyncHandler } from './middleware/error.js';
+import { checkDatabase } from './db.js';
 import * as products from './services/products.js';
 import * as sales from './services/sales.js';
 import * as customers from './services/customers.js';
 import * as reports from './services/reports.js';
 import * as users from './services/users.js';
+import { importInventoryRows, parseInventorySource } from './services/inventoryImport.js';
 import { creditPaymentSchema } from '@sunprime/shared';
+import { HttpError } from './middleware/error.js';
 import type { Router as ExpressRouter } from 'express';
 
 export const router: ExpressRouter = Router();
 
-router.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    supabaseConfigured: isSupabaseConfigured(),
-  });
-});
+router.get(
+  '/health',
+  asyncHandler(async (_req, res) => {
+    const dbOk = await checkDatabase();
+    if (!dbOk) {
+      res.status(503).json({ status: 'offline', error: 'No internet connection' });
+      return;
+    }
+    res.json({
+      status: 'ok',
+      supabaseConfigured: isSupabaseConfigured(),
+    });
+  }),
+);
+
+router.post(
+  '/auth/login',
+  asyncHandler(async (req, res) => {
+    res.json(await users.loginWithUsername(req.body));
+  }),
+);
 
 router.use(requireAuth);
 
@@ -206,6 +224,83 @@ router.patch(
   requireRole(UserRole.ADMIN),
   asyncHandler(async (req, res) => {
     res.json(await users.updateSettings(req.body));
+  }),
+);
+
+router.post(
+  '/inventory/import',
+  requireRole(UserRole.ADMIN),
+  asyncHandler(async (req, res) => {
+    const sql = typeof req.body?.sql === 'string' ? req.body.sql : '';
+    if (!sql.trim()) {
+      throw new HttpError(400, 'Upload a MySQL .sql or .csv extract first');
+    }
+    const rows = parseInventorySource(sql);
+    if (!rows.length) {
+      throw new HttpError(
+        400,
+        'No inventory rows found. Use columns name, sku, buying_price, selling_price, stock_quantity, unit, category, is_active',
+      );
+    }
+    if (rows.length > 20_000) {
+      throw new HttpError(400, 'Import is limited to 20,000 rows');
+    }
+
+    res.status(200);
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.socket?.setNoDelay?.(true);
+    res.flushHeaders();
+
+    let lastWrite = 0;
+    let lastPercent = -1;
+    const writeEvent = (event: Record<string, unknown>, force = false) => {
+      const percent = typeof event.percent === 'number' ? event.percent : -1;
+      const now = Date.now();
+      if (!force && percent === lastPercent && now - lastWrite < 80) return;
+      lastWrite = now;
+      lastPercent = percent;
+      const ok = res.write(`${JSON.stringify(event)}\n`);
+      if (typeof (res as { flush?: () => void }).flush === 'function') {
+        (res as { flush: () => void }).flush();
+      }
+      return ok;
+    };
+
+    try {
+      writeEvent({ type: 'started', total: rows.length, done: 0, percent: 0 }, true);
+      const result = await importInventoryRows(rows, (progress) => {
+        const percent =
+          progress.total === 0 ? 100 : Math.min(100, Math.round((progress.done / progress.total) * 100));
+        writeEvent({
+          type: 'progress',
+          percent,
+          done: progress.done,
+          total: progress.total,
+          inserted: progress.inserted,
+          updated: progress.updated,
+          skipped: progress.skipped,
+        });
+      });
+      writeEvent(
+        {
+          type: 'done',
+          percent: 100,
+          done: result.total,
+          total: result.total,
+          inserted: result.inserted,
+          updated: result.updated,
+          skipped: result.skipped,
+        },
+        true,
+      );
+      res.end();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Import failed';
+      writeEvent({ type: 'error', error: message }, true);
+      res.end();
+    }
   }),
 );
 

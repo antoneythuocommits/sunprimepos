@@ -8,6 +8,7 @@ export interface Product {
   selling_price: number;
   stock_quantity: number;
   unit: string;
+  category: string;
   is_active: boolean;
   allow_negative_stock: boolean;
   created_at: string;
@@ -141,6 +142,7 @@ export interface SalesReport {
 
 export interface AppUser {
   id: string;
+  username: string;
   email: string;
   role: UserRole;
   is_active: boolean;

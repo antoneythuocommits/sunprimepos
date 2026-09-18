@@ -9,23 +9,26 @@ import {
   View,
 } from 'react-native';
 import { getSupabase } from '../src/lib/supabase';
-import { api } from '../src/lib/api';
+import { api, loginWithUsername } from '../src/lib/api';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function onLogin() {
     setBusy(true);
-    const { error } = await getSupabase().auth.signInWithPassword({ email, password });
-    if (error) {
-      setBusy(false);
-      Alert.alert('Login failed', error.message);
-      return;
-    }
     try {
+      const tokens = await loginWithUsername(username, password);
+      const { error } = await getSupabase().auth.setSession({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+      });
+      if (error) {
+        Alert.alert('Login failed', error.message);
+        return;
+      }
       const me = await api<{ user: { role: string } }>('/me');
       if (me.user.role !== 'admin') {
         await getSupabase().auth.signOut();
@@ -48,10 +51,10 @@ export default function LoginScreen() {
       <TextInput
         style={styles.input}
         autoCapitalize="none"
-        keyboardType="email-address"
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
+        autoCorrect={false}
+        placeholder="Username"
+        value={username}
+        onChangeText={setUsername}
       />
       <TextInput
         style={styles.input}

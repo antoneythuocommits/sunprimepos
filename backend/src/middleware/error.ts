@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+import { isConnectivityError } from '../db.js';
 
 export class HttpError extends Error {
   constructor(
@@ -21,6 +22,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
   if (err instanceof HttpError) {
     res.status(err.status).json({ error: err.message });
+    return;
+  }
+  if (isConnectivityError(err)) {
+    res.status(503).json({ error: 'No internet connection' });
     return;
   }
   console.error(err);

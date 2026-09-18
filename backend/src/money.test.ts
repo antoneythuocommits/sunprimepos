@@ -3,7 +3,9 @@ import {
   applyFifoPayment,
   computeChange,
   computeSaleTotals,
+  formatQuantityDisplay,
   lineTotal,
+  priceSaleLine,
   roundMoney,
 } from '@sunprime/shared';
 
@@ -33,6 +35,33 @@ describe('lineTotal / change / sale totals', () => {
     expect(totals.total_amount).toBe(230);
     expect(totals.cost).toBe(160);
     expect(totals.profit).toBe(70);
+  });
+});
+
+describe('fegi quantity pricing', () => {
+  it('keeps decimal qty and original price, converting decimal×10 into units', () => {
+    const line = priceSaleLine({ category: 'fegi', quantity: 0.1, entered_price: 350 });
+    expect(formatQuantityDisplay(line.quantity, '0.1')).toBe('0.1');
+    expect(line.unit_price).toBe(350);
+    expect(line.line_total).toBe(350);
+  });
+
+  it('multiplies whole-number price by 10', () => {
+    const one = priceSaleLine({ category: 'fegi', quantity: 1, entered_price: 170 });
+    expect(formatQuantityDisplay(one.quantity, '1')).toBe('1');
+    expect(one.unit_price).toBe(1700);
+    expect(one.line_total).toBe(1700);
+
+    const five = priceSaleLine({ category: 'fegi', quantity: 5, entered_price: 350 });
+    expect(formatQuantityDisplay(five.quantity, '5')).toBe('5');
+    expect(five.unit_price).toBe(3500);
+    expect(five.line_total).toBe(17500);
+  });
+
+  it('does not change general items', () => {
+    const line = priceSaleLine({ category: 'general', quantity: 2, entered_price: 55 });
+    expect(line.unit_price).toBe(55);
+    expect(line.line_total).toBe(110);
   });
 });
 
