@@ -26,7 +26,6 @@ export default function InventoryPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const [delta, setDelta] = useState('');
-  const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -109,11 +108,10 @@ export default function InventoryPage() {
         (async () => {
           await api(`/products/${stockProduct.id}/stock`, {
             method: 'POST',
-            body: JSON.stringify({ delta: Number(delta), reason }),
+            body: JSON.stringify({ delta: Number(delta) }),
           });
           setStockProduct(null);
           setDelta('');
-          setReason('');
           await load('', true);
         })(),
         'Updating stock…',
@@ -274,13 +272,6 @@ export default function InventoryPage() {
               value={delta}
               onChange={(e) => setDelta(e.target.value)}
               placeholder="Delta (+ add / − remove)"
-              className="w-full rounded-lg border px-3 py-2"
-              required
-            />
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason"
               className="w-full rounded-lg border px-3 py-2"
               required
             />

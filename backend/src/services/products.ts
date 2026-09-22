@@ -4,6 +4,7 @@ import {
   updateProductSchema,
   normalizeProductCategory,
   roundMoney,
+  roundQuantity,
   type InventoryValuation,
   type Product,
 } from '@sunprime/shared';
@@ -162,13 +163,13 @@ export async function adjustStock(
     ]);
     if (!productRes.rows[0]) throw new HttpError(404, 'Product not found');
     const product = productRes.rows[0];
-    const newStock = roundMoney(toNumber(product.stock_quantity) + input.delta);
-    if (newStock < 0 && !product.allow_negative_stock) {
-      throw new HttpError(400, 'Stock would go negative');
+    const newStock = roundQuantity(toNumber(product.stock_quantity) + input.delta);
+    if (newStock < 0) {
+      throw new HttpError(400, 'Stock cannot be negative');
     }
     await client.query(
       `INSERT INTO stock_adjustments (product_id, delta, reason, user_id) VALUES ($1,$2,$3,$4)`,
-      [productId, input.delta, input.reason, userId],
+      [productId, input.delta, '', userId],
     );
     const updated = await client.query(
       `UPDATE products SET stock_quantity = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,

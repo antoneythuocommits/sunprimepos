@@ -74,7 +74,7 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
 
     for (const item of input.items) {
       const productRes = await client.query(
-        `SELECT id, name, buying_price, selling_price, stock_quantity, allow_negative_stock, is_active, category
+        `SELECT id, name, buying_price, selling_price, stock_quantity, is_active, category
          FROM products WHERE id = $1 FOR UPDATE`,
         [item.product_id],
       );
@@ -92,7 +92,7 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
       const currentStock = toNumber(product.stock_quantity);
       const newStock = roundQuantity(currentStock - priced.quantity);
 
-      if (newStock < 0 && !product.allow_negative_stock) {
+      if (newStock < 0) {
         throw new HttpError(400, `Insufficient stock for ${product.name}`);
       }
 

@@ -82,7 +82,7 @@ function toRow(raw: Record<string, unknown>): InventoryImportRow | null {
     sku: parseSku(mapped.sku),
     buying_price: Math.max(0, parseNumber(mapped.buying_price, 0)),
     selling_price: Math.max(0, parseNumber(mapped.selling_price, 0)),
-    stock_quantity: parseNumber(mapped.stock_quantity, 0),
+    stock_quantity: Math.max(0, parseNumber(mapped.stock_quantity, 0)),
     unit: (mapped.unit == null || String(mapped.unit).trim() === ''
       ? 'pcs'
       : String(mapped.unit).trim()

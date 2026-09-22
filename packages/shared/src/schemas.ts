@@ -14,7 +14,7 @@ export const createProductSchema = z.object({
   sku: z.string().max(100).nullable().optional(),
   buying_price: z.number().finite().nonnegative(),
   selling_price: z.number().finite().nonnegative(),
-  stock_quantity: z.number().finite().default(0),
+  stock_quantity: z.number().finite().nonnegative().default(0),
   unit: z.string().min(1).max(20).default('pcs'),
   category: z.string().trim().max(50).optional(),
   is_active: z.boolean().default(true),
@@ -25,7 +25,6 @@ export const updateProductSchema = createProductSchema.partial();
 
 export const stockAdjustSchema = z.object({
   delta: z.number().finite().refine((v) => v !== 0, 'delta must be non-zero'),
-  reason: z.string().min(1).max(500),
 });
 
 export const saleItemInputSchema = z.object({

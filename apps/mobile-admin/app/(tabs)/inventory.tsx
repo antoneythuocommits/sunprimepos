@@ -16,7 +16,6 @@ export default function InventoryScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selected, setSelected] = useState<Product | null>(null);
   const [delta, setDelta] = useState('');
-  const [reason, setReason] = useState('');
 
   async function load(q: string) {
     const r = await api<{ products: Product[] }>(
@@ -37,12 +36,11 @@ export default function InventoryScreen() {
     try {
       await api(`/products/${selected.id}/stock`, {
         method: 'POST',
-        body: JSON.stringify({ delta: Number(delta), reason }),
+        body: JSON.stringify({ delta: Number(delta) }),
       });
       Alert.alert('Stock updated');
       setSelected(null);
       setDelta('');
-      setReason('');
       await load(search);
     } catch (e) {
       Alert.alert('Failed', e instanceof Error ? e.message : 'Error');
@@ -78,12 +76,6 @@ export default function InventoryScreen() {
             keyboardType="numbers-and-punctuation"
             value={delta}
             onChangeText={setDelta}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Reason"
-            value={reason}
-            onChangeText={setReason}
           />
           <Pressable style={styles.btn} onPress={adjust}>
             <Text style={styles.btnText}>Apply adjustment</Text>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Customer, Product, SaleWithItems } from '@sunprime/shared';
-import { formatQuantityDisplay, isFegiCategory, priceSaleLine } from '@sunprime/shared';
+import { formatQuantityDisplay, isFegiCategory, priceSaleLine, roundQuantity } from '@sunprime/shared';
 import { api, money } from '@/lib/api';
 import { printReceipt, ReceiptView } from '@/components/ReceiptView';
 import { useProgress } from '@/components/ProgressDialog';
@@ -195,6 +195,16 @@ export function PosTerminal() {
     const entered_price = Number(price);
     if (!(quantity > 0) || !(entered_price >= 0)) {
       setError('Enter a valid quantity and price');
+      return;
+    }
+    const existingQty = cart.find((l) => l.product.id === dialogProduct.id)?.quantity ?? 0;
+    const available = Math.max(0, dialogProduct.stock_quantity);
+    if (roundQuantity(existingQty + quantity) > roundQuantity(available)) {
+      setError(
+        available > 0
+          ? `Only ${formatQuantityDisplay(available)} ${dialogProduct.unit} in stock`
+          : `${dialogProduct.name} is out of stock`,
+      );
       return;
     }
     const quantity_display = formatQuantityDisplay(quantity, qty);
