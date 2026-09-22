@@ -16,6 +16,6 @@ app.use(express.json({ limit: '20mb' }));
 app.use(router);
 app.use(errorHandler);
 
-app.listen(env.port, () => {
+app.listen(env.port, '127.0.0.1', () => {
   console.log(`Sunprime API listening on :${env.port}`);
 });
