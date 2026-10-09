@@ -39,7 +39,7 @@ export async function listProducts(params: {
   cursor?: string;
   includeBuying: boolean;
 }): Promise<{ products: Product[]; next_cursor: string | null }> {
-  const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+  const limit = Math.min(Math.max(params.limit ?? 50, 1), 2000);
   const values: unknown[] = [];
   const where: string[] = ['1=1'];
   const orderBy: string[] = [];

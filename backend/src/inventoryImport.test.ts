@@ -52,6 +52,33 @@ Sugar,GRC-001,120,150,25,kg,1`;
     expect(rows[0].category).toBe('general');
   });
 
+  it('keeps products that share the MySQL default sku 0', () => {
+    const sql = `
+      INSERT INTO \`stock\` (\`sku\`, \`name\`, \`category\`, \`stock_quantity\`, \`buying_price\`, \`selling_price\`) VALUES
+      ('0', 'MANJI GINGER', '0', 1, 240.00, 260.00),
+      ('0', 'GINGER BISCUITS PCS', '0', 0, 4.33, 5.00),
+      ('', 'EDEN TEA 500G', '', 0, 0.00, 0.00),
+      ('6161102750096', 'EDEN TEA 50G', '', 42, 169.50, 185.00);
+    `;
+    const rows = parseInventorySource(sql);
+    expect(rows.map((row) => row.name)).toEqual([
+      'MANJI GINGER',
+      'GINGER BISCUITS PCS',
+      'EDEN TEA 500G',
+      'EDEN TEA 50G',
+    ]);
+    expect(rows[0]).toMatchObject({
+      sku: null,
+      category: 'general',
+      stock_quantity: 1,
+      buying_price: 240,
+      selling_price: 260,
+    });
+    expect(rows[1].sku).toBeNull();
+    expect(rows[2].sku).toBeNull();
+    expect(rows[3].sku).toBe('6161102750096');
+  });
+
   it('maps category including fegi', () => {
     const sql = `
       INSERT INTO inventory (name, selling_price, category)

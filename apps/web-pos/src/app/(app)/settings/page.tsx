@@ -255,7 +255,8 @@ export default function SettingsPage() {
         <h2 className="text-lg font-semibold">Import inventory from MySQL</h2>
         <p className="text-sm text-[var(--muted)]">
           Export stock from MySQL using the column names below, then upload the <code>.sql</code> or{' '}
-          <code>.csv</code> file. Matching <strong>sku</strong> rows are updated; new SKUs are inserted.
+          <code>.csv</code> file. A real barcode updates that product. A blank sku, or <code>0</code>{' '}
+          (the MySQL default when there is no barcode), is ignored and those products match by name.
         </p>
         <div className="overflow-auto">
           <table className="w-full text-sm">

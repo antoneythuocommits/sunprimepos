@@ -34,7 +34,7 @@ export default function InventoryPage() {
   async function load(q = search, silent = false) {
     const run = async () => {
       const r = await api<{ products: Product[] }>(
-        `/products?search=${encodeURIComponent(q)}&limit=100`,
+        `/products?search=${encodeURIComponent(q)}&limit=2000`,
       );
       setProducts(r.products);
     };

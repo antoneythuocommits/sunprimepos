@@ -57,12 +57,15 @@ function parseNumber(value: unknown, fallback = 0): number {
 function parseSku(value: unknown): string | null {
   if (value == null) return null;
   const sku = String(value).trim();
-  return sku ? sku : null;
+  // phpMyAdmin dumps use `sku varchar NOT NULL DEFAULT '0'`. That 0 is "no barcode",
+  // not a shared code. Treating it as a real SKU collapses every such product into one row.
+  if (!sku || sku === '0') return null;
+  return sku;
 }
 
 function parseCategory(value: unknown): string {
   const raw = value == null ? '' : String(value).trim();
-  if (!raw) return 'general';
+  if (!raw || raw === '0') return 'general';
   if (raw.toLowerCase() === 'fegi') return 'fegi';
   return raw.slice(0, 50);
 }
@@ -296,7 +299,10 @@ export async function importInventoryRows(
       } else {
         existing = (
           await client.query<{ id: string }>(
-            `SELECT id FROM products WHERE sku IS NULL AND LOWER(name) = LOWER($1) LIMIT 1`,
+            `SELECT id FROM products
+             WHERE LOWER(name) = LOWER($1)
+               AND (sku IS NULL OR BTRIM(sku) = '' OR sku = '0')
+             LIMIT 1`,
             [row.name],
           )
         ).rows[0];
