@@ -1,4 +1,13 @@
-import { reportQuerySchema, roundMoney, type SalesReport, type SalesReportTotals } from '@sunprime/shared';
+import {
+  reportQuerySchema,
+  roundMoney,
+  roundQuantity,
+  type SalesReport,
+  type SalesReportLine,
+  type SalesReportProduct,
+  type SalesReportSale,
+  type SalesReportTotals,
+} from '@sunprime/shared';
 import { pool, toNumber } from '../db.js';
 
 function emptyTotals(): SalesReportTotals {
@@ -73,6 +82,90 @@ export async function getSalesReport(rawQuery: unknown): Promise<SalesReport> {
     }
   }
 
+  const lines = await pool.query(
+    `SELECT
+       s.id AS sale_id,
+       s.receipt_number,
+       s.sale_type,
+       s.total_amount,
+       s.created_at,
+       si.product_name,
+       si.quantity,
+       si.line_total,
+       si.buying_price
+     FROM sales s
+     LEFT JOIN sale_items si ON si.sale_id = s.id
+     WHERE s.status = 'completed'
+       AND s.created_at >= $1::date
+       AND s.created_at < ($2::date + INTERVAL '1 day')
+     ORDER BY s.created_at DESC, si.id`,
+    [query.from, query.to],
+  );
+
+  const sales: SalesReportSale[] = [];
+  const saleIndex = new Map<string, SalesReportSale>();
+  const productIndex = new Map<string, SalesReportProduct>();
+
+  for (const row of lines.rows) {
+    const saleId = String(row.sale_id);
+    let sale = saleIndex.get(saleId);
+    if (!sale) {
+      sale = {
+        id: saleId,
+        receipt_number: String(row.receipt_number),
+        created_at: new Date(String(row.created_at)).toISOString(),
+        sale_type: row.sale_type === 'credit' ? 'credit' : 'cash',
+        total_amount: toNumber(row.total_amount),
+        profit: 0,
+        items: [],
+      };
+      saleIndex.set(saleId, sale);
+      sales.push(sale);
+    }
+    if (row.product_name == null) continue;
+
+    const quantity = toNumber(row.quantity);
+    const lineTotal = roundMoney(toNumber(row.line_total));
+    const buying = toNumber(row.buying_price);
+    const cost = roundMoney(quantity * buying);
+    const profit = roundMoney(lineTotal - cost);
+    const missing = buying <= 0;
+    const item: SalesReportLine = {
+      product_name: String(row.product_name),
+      quantity,
+      line_total: lineTotal,
+      cost,
+      profit,
+      missing_buying_price: missing,
+    };
+    sale.items.push(item);
+    sale.profit = roundMoney(sale.profit + profit);
+
+    const key = item.product_name.toLowerCase();
+    const product = productIndex.get(key) ?? {
+      product_name: item.product_name,
+      quantity: 0,
+      revenue: 0,
+      cost: 0,
+      profit: 0,
+      missing_buying_price: false,
+    };
+    product.quantity = roundQuantity(product.quantity + quantity);
+    product.revenue = roundMoney(product.revenue + lineTotal);
+    product.cost = roundMoney(product.cost + cost);
+    product.profit = roundMoney(product.revenue - product.cost);
+    product.missing_buying_price = product.missing_buying_price || missing;
+    productIndex.set(key, product);
+  }
+
+  const products = [...productIndex.values()].sort((a, b) =>
+    a.product_name.localeCompare(b.product_name),
+  );
+
+  // #region agent log
+  fetch('http://127.0.0.1:7689/ingest/4773018b-d033-46d7-8403-a56ad49fb9ca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf4697'},body:JSON.stringify({sessionId:'bf4697',runId:'pre-fix',hypothesisId:'A',location:'reports.ts:getSalesReport',message:'sales report aggregates',data:{from:query.from,to:query.to,saleCount:totals.sale_count,lineRows:lines.rows.length,nullProductNames:lines.rows.filter((row)=>row.product_name==null).length,productCount:products.length,salesWithItems:sales.filter((sale)=>sale.items.length>0).length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   return {
     from: query.from,
     to: query.to,
@@ -82,5 +175,7 @@ export async function getSalesReport(rawQuery: unknown): Promise<SalesReport> {
       query.group === 'day'
         ? [...byDay.entries()].map(([date, t]) => ({ date, ...t }))
         : undefined,
+    products,
+    sales,
   };
 }

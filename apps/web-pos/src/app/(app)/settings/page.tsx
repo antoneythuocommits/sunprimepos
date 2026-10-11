@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { AppSettings, AppUser } from '@sunprime/shared';
 import { useProgress } from '@/components/ProgressDialog';
-import { api, importInventoryWithProgress } from '@/lib/api';
+import { api, importDebtsWithProgress, importInventoryWithProgress } from '@/lib/api';
 
 export default function SettingsPage() {
   const { withProgress, show, hide, setProgress } = useProgress();
@@ -14,10 +14,11 @@ export default function SettingsPage() {
   const [role, setRole] = useState<'admin' | 'cashier'>('cashier');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const [fileName, setFileName] = useState('');
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [debtFileName, setDebtFileName] = useState('');
+  const [debtImportResult, setDebtImportResult] = useState<string | null>(null);
 
   async function refresh() {
     const [u, s] = await Promise.all([
@@ -29,9 +30,9 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    void withProgress(refresh(), 'Loading settings…')
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load settings'))
-      .finally(() => setLoading(false));
+    void withProgress(refresh(), 'Loading settings…').catch((e) =>
+      setError(e instanceof Error ? e.message : 'Failed to load settings'),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -140,6 +141,51 @@ export default function SettingsPage() {
     }
   }
 
+  async function importDebts(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const input = e.currentTarget.elements.namedItem('debtFile') as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (!file) {
+      setError('Choose a .sql or .csv debt extract first');
+      return;
+    }
+    const confirmed = window.confirm(
+      'Replace all current credit debts with this file? Cash sales and stock stay.',
+    );
+    if (!confirmed) return;
+    setError(null);
+    setDebtImportResult(null);
+    show('Reading file…', 0);
+    try {
+      const sql = await file.text();
+      setProgress('Replacing credit debts…', 0, 'Preparing rows…');
+      const result = await importDebtsWithProgress(sql, (event) => {
+        const total = event.total ?? 0;
+        const done = event.done ?? 0;
+        const percent = event.percent ?? (total ? Math.round((done / total) * 100) : 0);
+        const detail =
+          total > 0 ? `${done.toLocaleString()} of ${total.toLocaleString()} debts` : 'Preparing rows…';
+        if (event.type === 'done') {
+          setProgress('Finishing import…', 100, detail);
+          return;
+        }
+        setProgress('Replacing credit debts…', percent, detail);
+      });
+      const summary = `Loaded ${result.debts} debts, recorded ${result.payments} payments, removed ${result.removed} previous debts${
+        result.skipped ? `, skipped ${result.skipped}` : ''
+      }`;
+      setProgress('Import complete', 100, summary);
+      setDebtImportResult(
+        result.skip_reasons.length ? `${summary}. ${result.skip_reasons.join(' ')}` : summary,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      hide();
+    }
+  }
+
   return (
     <>
       <div className="grid lg:grid-cols-2 gap-4">
@@ -147,7 +193,6 @@ export default function SettingsPage() {
           <h1 className="text-lg font-semibold">Users</h1>
           {error && <p className="text-sm text-red-700">{error}</p>}
           {message && <p className="text-sm text-green-800">{message}</p>}
-          {loading && <p className="text-sm text-[var(--muted)]">Loading users…</p>}
           <form onSubmit={createUser} className="space-y-2 border-b border-[var(--line)] pb-4">
             <input
               type="text"
@@ -311,6 +356,68 @@ FROM your_mysql_stock_table;`}</pre>
           {fileName && <span className="text-xs text-[var(--muted)]">{fileName}</span>}
         </form>
         {importResult && <p className="text-sm text-green-800">{importResult}</p>}
+      </section>
+
+      <section className="mt-4 bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4 space-y-3">
+        <h2 className="text-lg font-semibold">Import debts from a previous system</h2>
+        <p className="text-sm text-[var(--muted)]">
+          Upload one row per item. Rows with the same <code>receipt_number</code> form one debt.
+          For that receipt, <code>sum(line_total) − paid_amount = debt_balance</code>. This
+          replaces every current credit debt. Cash sales and stock are kept, and importing does
+          not change quantities on hand.
+        </p>
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[var(--muted)] border-b border-[var(--line)]">
+                <th className="py-2 pr-3">Column name</th>
+                <th className="pr-3">Required</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['customer_name', 'Yes', 'Customer the debt belongs to'],
+                ['receipt_number', 'Yes', 'Groups item rows into one debt'],
+                ['product_name', 'Yes', 'Item sold on credit'],
+                ['quantity', 'Yes', 'Quantity of that item'],
+                ['unit_price', 'Yes', 'Price per unit'],
+                ['line_total', 'Yes', 'quantity × unit_price for that item'],
+                ['paid_amount', 'Yes', 'Already received for the whole debt. Repeat it on every item row'],
+                ['debt_balance', 'Yes', 'Still owed for the whole debt. Repeat it on every item row'],
+                ['phone', 'No', 'Customer phone'],
+                ['debt_date', 'No', 'Date of the debt, YYYY-MM-DD'],
+                ['sku', 'No', 'Barcode, used only to attach the line to an existing product'],
+              ].map(([col, req, meaning]) => (
+                <tr key={col} className="border-b border-[var(--line)]/50">
+                  <td className="py-2 pr-3 font-mono">{col}</td>
+                  <td className="pr-3">{req}</td>
+                  <td>{meaning}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <pre className="text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg p-3 overflow-auto">{`INSERT INTO debts (
+  customer_name, phone, receipt_number, debt_date, product_name,
+  quantity, unit_price, line_total, paid_amount, debt_balance
+) VALUES
+  ('Jane Wanjiku', '0712345678', 'OLD-1001', '2026-03-01', 'White Bread Loaf', 2, 55.00, 110.00, 50.00, 160.00),
+  ('Jane Wanjiku', '0712345678', 'OLD-1001', '2026-03-01', 'Croissant', 2, 50.00, 100.00, 50.00, 160.00);`}</pre>
+        <form onSubmit={importDebts} className="flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            name="debtFile"
+            accept=".sql,.csv,.json,.txt"
+            onChange={(e) => setDebtFileName(e.target.files?.[0]?.name ?? '')}
+            className="text-sm"
+          />
+          <button type="submit" className="px-4 py-2 rounded-lg bg-[var(--brand)] text-white">
+            Replace debts
+          </button>
+          {debtFileName && <span className="text-xs text-[var(--muted)]">{debtFileName}</span>}
+        </form>
+        {debtImportResult && <p className="text-sm text-green-800">{debtImportResult}</p>}
       </section>
     </>
   );

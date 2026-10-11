@@ -13,7 +13,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.150.148:4000",
+        "EXPO_PUBLIC_API_URL": "https://sunprime.site/api",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ayotqhimidcpczunzrtr.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5b3RxaGltaWRjcGN6dW56cnRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA3NTUsImV4cCI6MjEwNDAyNjc1NX0.ThNjxOBurkghUd9XvXtpEtLTI2GxNpy2tdGrXDkiZU4"
       }
@@ -26,7 +26,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.150.148:4000",
+        "EXPO_PUBLIC_API_URL": "https://sunprime.site/api",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ayotqhimidcpczunzrtr.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5b3RxaGltaWRjcGN6dW56cnRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA3NTUsImV4cCI6MjEwNDAyNjc1NX0.ThNjxOBurkghUd9XvXtpEtLTI2GxNpy2tdGrXDkiZU4"
       }
@@ -38,7 +38,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.150.148:4000",
+        "EXPO_PUBLIC_API_URL": "https://sunprime.site/api",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ayotqhimidcpczunzrtr.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5b3RxaGltaWRjcGN6dW56cnRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA3NTUsImV4cCI6MjEwNDAyNjc1NX0.ThNjxOBurkghUd9XvXtpEtLTI2GxNpy2tdGrXDkiZU4"
       }

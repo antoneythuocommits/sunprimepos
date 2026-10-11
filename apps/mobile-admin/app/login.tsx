@@ -10,15 +10,18 @@ import {
 } from 'react-native';
 import { getSupabase } from '../src/lib/supabase';
 import { api, loginWithUsername } from '../src/lib/api';
+import { useProgress } from '../src/components/ProgressDialog';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { show, hide } = useProgress();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function onLogin() {
     setBusy(true);
+    show('Signing in…');
     try {
       const tokens = await loginWithUsername(username, password);
       const { error } = await getSupabase().auth.setSession({
@@ -33,7 +36,6 @@ export default function LoginScreen() {
       if (me.user.role !== 'admin') {
         await getSupabase().auth.signOut();
         Alert.alert('Access denied', 'Admin role required');
-        setBusy(false);
         return;
       }
       router.replace('/(tabs)/reports');
@@ -41,6 +43,7 @@ export default function LoginScreen() {
       Alert.alert('Error', e instanceof Error ? e.message : 'Auth failed');
     } finally {
       setBusy(false);
+      hide();
     }
   }
 

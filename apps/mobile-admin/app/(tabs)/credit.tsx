@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   Alert,
   Pressable,
@@ -15,39 +16,81 @@ import type {
 } from '@sunprime/shared';
 import { formatQuantityDisplay } from '@sunprime/shared';
 import { api, money } from '../../src/lib/api';
+import { useProgress } from '../../src/components/ProgressDialog';
 
 export default function CreditScreen() {
+  const { withProgress } = useProgress();
   const [customers, setCustomers] = useState<(Customer & { outstanding?: number })[]>([]);
   const [summary, setSummary] = useState<CustomerCreditSummary | null>(null);
   const [amount, setAmount] = useState('');
   const [settlement, setSettlement] = useState<CreditSettlementReceipt | null>(null);
+  const [query, setQuery] = useState('');
+  const [totalDebt, setTotalDebt] = useState(0);
+  const skipSearch = useRef(true);
+  const queryRef = useRef(query);
+  queryRef.current = query;
 
-  async function loadCustomers() {
-    const r = await api<{ customers: (Customer & { outstanding?: number })[] }>('/customers');
+  async function loadCustomers(search = query) {
+    const q = search.trim();
+    const path = q ? `/customers?search=${encodeURIComponent(q)}` : '/customers';
+    const r = await api<{
+      customers: (Customer & { outstanding?: number })[];
+      total_outstanding: number;
+    }>(path);
     setCustomers(r.customers.filter((c) => (c.outstanding ?? 0) > 0));
+    setTotalDebt(r.total_outstanding ?? 0);
   }
 
+  useFocusEffect(
+    useCallback(() => {
+      void withProgress(loadCustomers(queryRef.current), 'Loading customers…').catch((e) =>
+        Alert.alert('Error', e.message),
+      );
+    }, [withProgress]),
+  );
+
   useEffect(() => {
-    loadCustomers().catch((e) => Alert.alert('Error', e.message));
-  }, []);
+    if (skipSearch.current) {
+      skipSearch.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      loadCustomers(query).catch((e) =>
+        Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+      );
+    }, 200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   async function openCustomer(id: string) {
-    const s = await api<CustomerCreditSummary>(`/customers/${id}/credit`);
-    setSummary(s);
-    setSettlement(null);
+    await withProgress(
+      (async () => {
+        const s = await api<CustomerCreditSummary>(`/customers/${id}/credit`);
+        setSummary(s);
+        setSettlement(null);
+      })(),
+      'Loading credit orders…',
+    );
   }
 
   async function pay() {
     if (!summary) return;
     try {
-      const receipt = await api<CreditSettlementReceipt>(
-        `/customers/${summary.customer.id}/credit-payments`,
-        { method: 'POST', body: JSON.stringify({ amount: Number(amount) }) },
+      await withProgress(
+        (async () => {
+          const receipt = await api<CreditSettlementReceipt>(
+            `/customers/${summary.customer.id}/credit-payments`,
+            { method: 'POST', body: JSON.stringify({ amount: Number(amount) }) },
+          );
+          setSettlement(receipt);
+          setAmount('');
+          const s = await api<CustomerCreditSummary>(`/customers/${summary.customer.id}/credit`);
+          setSummary(s);
+          await loadCustomers();
+        })(),
+        'Recording payment…',
       );
-      setSettlement(receipt);
-      setAmount('');
-      await openCustomer(summary.customer.id);
-      await loadCustomers();
     } catch (e) {
       Alert.alert('Payment failed', e instanceof Error ? e.message : 'Error');
     }
@@ -58,13 +101,32 @@ export default function CreditScreen() {
       {!summary ? (
         <>
           <Text style={styles.title}>Customers with outstanding credit</Text>
+          <Text style={styles.total}>Total debt {money(totalDebt)}</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Search customer name"
+            value={query}
+            onChangeText={setQuery}
+          />
           {customers.map((c) => (
-            <Pressable key={c.id} style={styles.card} onPress={() => openCustomer(c.id)}>
+            <Pressable
+              key={c.id}
+              style={styles.card}
+              onPress={() =>
+                openCustomer(c.id).catch((e) =>
+                  Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+                )
+              }
+            >
               <Text style={styles.name}>{c.name}</Text>
               <Text style={styles.muted}>Outstanding: {money(c.outstanding ?? 0)}</Text>
             </Pressable>
           ))}
-          {!customers.length && <Text style={styles.muted}>No outstanding credit.</Text>}
+          {!customers.length && (
+            <Text style={styles.muted}>
+              {query.trim() ? 'No customers match that name.' : 'No outstanding credit.'}
+            </Text>
+          )}
         </>
       ) : (
         <>
@@ -76,7 +138,8 @@ export default function CreditScreen() {
           {summary.orders.map((o) => (
             <View key={o.sale.id} style={styles.card}>
               <Text style={styles.name}>
-                {o.sale.receipt_number} · bal {money(o.outstanding_balance)}
+                {o.sale.receipt_number} · total {money(o.sale.total_amount)} · paid{' '}
+                {money(o.allocated_total)} · bal {money(o.outstanding_balance)}
               </Text>
               {o.items.map((it) => (
                 <Text key={it.id} style={styles.muted}>
@@ -117,6 +180,7 @@ export default function CreditScreen() {
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#f3f0e8', flexGrow: 1, gap: 10 },
   title: { fontSize: 18, fontWeight: '700', color: '#1e3a2b' },
+  total: { fontSize: 16, fontWeight: '700', color: '#1a211c' },
   name: { fontWeight: '600', color: '#1a211c' },
   muted: { color: '#5c675f', marginTop: 2 },
   card: {

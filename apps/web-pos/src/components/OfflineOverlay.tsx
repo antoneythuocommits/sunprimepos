@@ -2,16 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  checkReachability,
   getOffline,
   isBrowserOffline,
-  pingApi,
   reportNetworkFailure,
   reportNetworkSuccess,
   subscribeOffline,
+  type Reachability,
 } from '@/lib/connectivity';
 
 export function OfflineOverlay() {
   const [offline, setOffline] = useState(false);
+  const [reason, setReason] = useState<Reachability>('offline');
   const hadOverlay = useRef(false);
 
   useEffect(() => subscribeOffline(setOffline), []);
@@ -47,9 +49,10 @@ export function OfflineOverlay() {
         schedule();
         return;
       }
-      const ok = await pingApi();
+      const reachability = await checkReachability();
       if (cancelled) return;
-      if (ok) {
+      setReason(reachability);
+      if (reachability === 'ok') {
         reportNetworkSuccess();
       } else {
         reportNetworkFailure();
@@ -100,11 +103,12 @@ export function OfflineOverlay() {
           aria-hidden
         />
         <h2 id="offline-title" className="text-xl font-semibold text-[var(--brand-dark)]">
-          No internet connection
+          {reason === 'api' ? 'Can’t reach the Sunprime server' : 'No internet connection'}
         </h2>
         <p id="offline-copy" className="mt-2 text-sm text-[var(--muted)] leading-relaxed">
-          Check your internet connection. This page will resume automatically when you are back
-          online.
+          {reason === 'api'
+            ? 'The register is online, but the Sunprime server did not answer. This page will resume when the server is reachable.'
+            : 'Check your internet connection. This page will resume automatically when you are back online.'}
         </p>
       </div>
     </div>

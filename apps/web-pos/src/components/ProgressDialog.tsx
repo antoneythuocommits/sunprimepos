@@ -18,10 +18,19 @@ interface ProgressState {
 }
 
 interface ProgressContextValue {
-  show: (message?: string, percent?: number | null, detail?: string) => void;
+  show: (message?: string, percent?: number | null, detail?: string) => number;
   setProgress: (message?: string, percent?: number | null, detail?: string) => void;
-  hide: () => void;
+  hide: (id?: number) => void;
   withProgress: <T>(promise: Promise<T>, message?: string) => Promise<T>;
+  beginNavigation: (message: string) => void;
+  finishNavigation: () => void;
+}
+
+interface ProgressTask {
+  id: number;
+  message: string;
+  percent: number | null;
+  detail?: string;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
@@ -55,33 +64,26 @@ export function ProgressDialog({
     >
       <div className="mx-4 w-full max-w-sm rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-6 py-7 shadow-xl text-center">
         {determinate ? (
-          <>
-            <p
-              className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--brand-dark)]"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={value}
-            >
-              {value}%
-            </p>
-            <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-[var(--bg-deep)]">
-              <div
-                className="h-full rounded-full bg-[var(--brand)] transition-[width] duration-150 ease-out"
-                style={{ width: `${value}%` }}
-                aria-hidden
-              />
-            </div>
-          </>
-        ) : (
+          <p
+            className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--brand-dark)]"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={value}
+          >
+            {value}%
+          </p>
+        ) : null}
+        <div className={`${determinate ? 'mt-3' : ''} h-2 w-full overflow-hidden rounded-full bg-[var(--bg-deep)]`}>
           <div
-            className="mx-auto mb-4 h-10 w-10 rounded-full border-[3px] border-[var(--brand)]/25 border-t-[var(--brand)] animate-spin"
+            className={`h-full rounded-full bg-[var(--brand)] ${
+              determinate ? 'transition-[width] duration-150 ease-out' : 'progress-indeterminate w-2/5'
+            }`}
+            style={determinate ? { width: `${value}%` } : undefined}
             aria-hidden
           />
-        )}
-        <p className={`text-sm font-medium text-[var(--brand-dark)] ${determinate ? 'mt-3' : ''}`}>
-          {message}
-        </p>
+        </div>
+        <p className="mt-4 text-sm font-medium text-[var(--brand-dark)]">{message}</p>
         {detail ? <p className="mt-1 text-xs text-[var(--muted)]">{detail}</p> : null}
       </div>
     </div>
@@ -94,52 +96,99 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     message: 'Loading…',
     percent: null,
   });
-  const depthRef = useRef(0);
+  const tasksRef = useRef<ProgressTask[]>([]);
+  const orderRef = useRef<number[]>([]);
+  const idRef = useRef(0);
+  const navIdRef = useRef<number | null>(null);
+  const generationRef = useRef(0);
+
+  const publish = useCallback(() => {
+    const top = tasksRef.current[tasksRef.current.length - 1];
+    if (!top) {
+      setState((s) => ({ ...s, open: false, percent: null, detail: undefined }));
+      return;
+    }
+    setState({ open: true, message: top.message, percent: top.percent, detail: top.detail });
+  }, []);
 
   const show = useCallback((message = 'Loading…', percent: number | null = null, detail?: string) => {
-    depthRef.current += 1;
-    setState({
-      open: true,
+    const id = ++idRef.current;
+    tasksRef.current.push({
+      id,
       message,
       percent: percent == null ? null : clampPercent(percent),
       detail,
     });
-  }, []);
+    orderRef.current.push(id);
+    publish();
+    return id;
+  }, [publish]);
+
+  const hide = useCallback((id?: number) => {
+    const target = id ?? orderRef.current[orderRef.current.length - 1];
+    if (target == null) return;
+    orderRef.current = orderRef.current.filter((item) => item !== target);
+    if (navIdRef.current === target) navIdRef.current = null;
+    const next = tasksRef.current.filter((task) => task.id !== target);
+    if (next.length === tasksRef.current.length) return;
+    tasksRef.current = next;
+    publish();
+  }, [publish]);
+
+  const beginNavigation = useCallback((message: string) => {
+    generationRef.current += 1;
+    const id = ++idRef.current;
+    tasksRef.current = [{ id, message, percent: null }];
+    orderRef.current = [id];
+    navIdRef.current = id;
+    publish();
+  }, [publish]);
 
   const setProgress = useCallback((message?: string, percent?: number | null, detail?: string) => {
-    setState((s) => {
-      if (!s.open) return s;
-      return {
-        ...s,
-        message: message ?? s.message,
-        percent: percent === undefined ? s.percent : percent == null ? null : clampPercent(percent),
-        detail: detail === undefined ? s.detail : detail,
-      };
-    });
-  }, []);
+    const task = tasksRef.current[tasksRef.current.length - 1];
+    if (!task) return;
+    if (message !== undefined) task.message = message;
+    if (percent !== undefined) task.percent = percent == null ? null : clampPercent(percent);
+    if (detail !== undefined) task.detail = detail;
+    publish();
+  }, [publish]);
 
-  const hide = useCallback(() => {
-    depthRef.current = Math.max(0, depthRef.current - 1);
-    if (depthRef.current === 0) {
-      setState((s) => ({ ...s, open: false, percent: null, detail: undefined }));
-    }
-  }, []);
+  const finishNavigation = useCallback(() => {
+    if (navIdRef.current == null) return;
+    hide(navIdRef.current);
+  }, [hide]);
 
   const withProgress = useCallback(
     async <T,>(promise: Promise<T>, message = 'Loading…'): Promise<T> => {
-      show(message);
+      const gen = generationRef.current;
+      let taskId: number;
+      if (navIdRef.current != null) {
+        taskId = navIdRef.current;
+        navIdRef.current = null;
+        const task = tasksRef.current.find((item) => item.id === taskId);
+        if (task) {
+          task.message = message;
+          task.percent = null;
+          task.detail = undefined;
+          publish();
+        } else {
+          taskId = show(message);
+        }
+      } else {
+        taskId = show(message);
+      }
       try {
         return await promise;
       } finally {
-        hide();
+        if (generationRef.current === gen) hide(taskId);
       }
     },
-    [show, hide],
+    [show, hide, publish],
   );
 
   const value = useMemo(
-    () => ({ show, setProgress, hide, withProgress }),
-    [show, setProgress, hide, withProgress],
+    () => ({ show, setProgress, hide, withProgress, beginNavigation, finishNavigation }),
+    [show, setProgress, hide, withProgress, beginNavigation, finishNavigation],
   );
 
   return (

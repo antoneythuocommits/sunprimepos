@@ -132,12 +132,42 @@ export interface SalesReportDay extends SalesReportTotals {
   date: string;
 }
 
+export interface SalesReportLine {
+  product_name: string;
+  quantity: number;
+  line_total: number;
+  cost: number;
+  profit: number;
+  missing_buying_price: boolean;
+}
+
+export interface SalesReportSale {
+  id: string;
+  receipt_number: string;
+  created_at: string;
+  sale_type: 'cash' | 'credit';
+  total_amount: number;
+  profit: number;
+  items: SalesReportLine[];
+}
+
+export interface SalesReportProduct {
+  product_name: string;
+  quantity: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  missing_buying_price: boolean;
+}
+
 export interface SalesReport {
   from: string;
   to: string;
   group: 'day' | 'range';
   totals: SalesReportTotals;
   days?: SalesReportDay[];
+  products: SalesReportProduct[];
+  sales: SalesReportSale[];
 }
 
 export interface AppUser {

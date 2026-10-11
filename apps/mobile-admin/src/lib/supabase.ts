@@ -47,7 +47,7 @@ export const supabaseAnonKey = (
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || extraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY')
 ).trim();
 export const apiUrl = (
-  process.env.EXPO_PUBLIC_API_URL || extraValue('EXPO_PUBLIC_API_URL') || 'http://localhost:4000'
+  process.env.EXPO_PUBLIC_API_URL || extraValue('EXPO_PUBLIC_API_URL') || 'https://sunprime.site/api'
 ).trim();
 
 export const supabaseConfigured =

@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { InventoryValuation } from '@sunprime/shared';
 import { api, money } from '../../src/lib/api';
+import { useProgress } from '../../src/components/ProgressDialog';
 
 export default function ValuationScreen() {
+  const { withProgress } = useProgress();
   const [data, setData] = useState<InventoryValuation | null>(null);
 
-  useEffect(() => {
-    api<InventoryValuation>('/inventory/valuation')
-      .then(setData)
-      .catch((e) => Alert.alert('Error', e.message));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void withProgress(
+        api<InventoryValuation>('/inventory/valuation').then(setData),
+        'Loading valuation…',
+      ).catch((e) => Alert.alert('Error', e.message));
+    }, [withProgress]),
+  );
 
   if (!data) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.muted}>Loading valuation…</Text>
-      </View>
-    );
+    return <View style={styles.container} />;
   }
 
   return (

@@ -44,6 +44,21 @@ export async function listCustomers(
   return customers;
 }
 
+export async function totalOutstanding(): Promise<number> {
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(bal), 0) AS total
+     FROM (
+       SELECT s.total_amount - COALESCE(SUM(a.amount_allocated), 0) AS bal
+       FROM sales s
+       LEFT JOIN credit_payment_allocations a ON a.sale_id = s.id
+       WHERE s.sale_type = 'credit' AND s.status = 'completed'
+       GROUP BY s.id, s.total_amount
+     ) debts
+     WHERE bal > 0`,
+  );
+  return roundMoney(toNumber(result.rows[0]?.total));
+}
+
 export async function createCustomer(raw: unknown): Promise<Customer> {
   const input = createCustomerSchema.parse(raw);
   const result = await pool.query(

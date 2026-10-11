@@ -92,9 +92,16 @@ async function pingHealth(): Promise<boolean> {
   }
 }
 
-export async function pingApi(): Promise<boolean> {
-  if (isBrowserOffline()) return false;
+export type Reachability = 'ok' | 'offline' | 'api';
+
+export async function checkReachability(): Promise<Reachability> {
+  if (await pingHealth()) return 'ok';
+  if (isBrowserOffline()) return 'offline';
   const remote = await pingRemote();
-  if (remote === false) return false;
-  return pingHealth();
+  if (remote === false) return 'offline';
+  return 'api';
+}
+
+export async function pingApi(): Promise<boolean> {
+  return (await checkReachability()) === 'ok';
 }

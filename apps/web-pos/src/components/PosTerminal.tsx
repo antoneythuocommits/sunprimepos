@@ -67,7 +67,7 @@ function MessageBox({
 }
 
 export function PosTerminal() {
-  const { show, hide, withProgress } = useProgress();
+  const { show, hide, withProgress, finishNavigation } = useProgress();
   const paidRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
@@ -120,7 +120,8 @@ export function PosTerminal() {
       setSelectedCustomer(saved.selectedCustomer);
     }
     setCacheReady(true);
-  }, []);
+    finishNavigation();
+  }, [finishNavigation]);
 
   useEffect(() => {
     if (!cacheReady) return;
@@ -255,7 +256,10 @@ export function PosTerminal() {
 
     setSkuLookupBusy(true);
     try {
-      const product = await api<Product>(`/products/by-sku/${encodeURIComponent(term)}`);
+      const product = await withProgress(
+        api<Product>(`/products/by-sku/${encodeURIComponent(term)}`),
+        'Looking up barcode…',
+      );
       openProduct(product);
     } catch {
       // Name search only — never pick a suggestion after a failed barcode scan

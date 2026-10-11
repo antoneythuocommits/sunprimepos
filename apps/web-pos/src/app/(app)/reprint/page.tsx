@@ -11,7 +11,7 @@ export default function ReprintPage() {
   const [sales, setSales] = useState<SaleWithItems[]>([]);
   const [selected, setSelected] = useState<SaleWithItems | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     void withProgress(
@@ -19,7 +19,7 @@ export default function ReprintPage() {
       'Loading sales…',
     )
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load sales'))
-      .finally(() => setLoading(false));
+      .finally(() => setReady(true));
   }, [withProgress]);
 
   async function selectSale(id: string) {
@@ -37,7 +37,9 @@ export default function ReprintPage() {
         <section className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4">
           <h1 className="text-lg font-semibold mb-3">Reprint receipts</h1>
           {error && <p className="text-sm text-red-700">{error}</p>}
-          {loading && <p className="text-sm text-[var(--muted)] mb-2">Loading sales…</p>}
+          {ready && sales.length === 0 && (
+            <p className="text-sm text-[var(--muted)] mb-2">No sales yet.</p>
+          )}
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[var(--muted)] border-b">

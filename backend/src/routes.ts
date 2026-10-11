@@ -10,6 +10,7 @@ import * as customers from './services/customers.js';
 import * as reports from './services/reports.js';
 import * as users from './services/users.js';
 import { importInventoryRows, parseInventorySource } from './services/inventoryImport.js';
+import { importDebtRows, parseDebtSource, planDebtImport } from './services/debtImport.js';
 import { creditPaymentSchema } from '@sunprime/shared';
 import { HttpError } from './middleware/error.js';
 import type { Router as ExpressRouter } from 'express';
@@ -82,6 +83,15 @@ router.post(
   }),
 );
 
+router.get(
+  '/products/:id',
+  asyncHandler(async (req, res) => {
+    const includeBuying = req.user!.role === UserRole.ADMIN;
+    const product = await products.getProduct(req.params.id, includeBuying);
+    res.json(product);
+  }),
+);
+
 router.patch(
   '/products/:id',
   requireRole(UserRole.ADMIN),
@@ -143,10 +153,12 @@ router.get(
 router.get(
   '/customers',
   asyncHandler(async (req, res) => {
-    const list = await customers.listCustomers(
-      typeof req.query.search === 'string' ? req.query.search : undefined,
-    );
-    res.json({ customers: list });
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const [list, total_outstanding] = await Promise.all([
+      customers.listCustomers(search),
+      customers.totalOutstanding(),
+    ]);
+    res.json({ customers: list, total_outstanding });
   }),
 );
 
@@ -262,9 +274,8 @@ router.post(
       lastWrite = now;
       lastPercent = percent;
       const ok = res.write(`${JSON.stringify(event)}\n`);
-      if (typeof (res as { flush?: () => void }).flush === 'function') {
-        (res as { flush: () => void }).flush();
-      }
+      const flushable = res as unknown as { flush?: () => void };
+      if (typeof flushable.flush === 'function') flushable.flush();
       return ok;
     };
 
@@ -292,6 +303,89 @@ router.post(
           inserted: result.inserted,
           updated: result.updated,
           skipped: result.skipped,
+        },
+        true,
+      );
+      res.end();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Import failed';
+      writeEvent({ type: 'error', error: message }, true);
+      res.end();
+    }
+  }),
+);
+
+router.post(
+  '/debts/import',
+  requireRole(UserRole.ADMIN),
+  asyncHandler(async (req, res) => {
+    const sql = typeof req.body?.sql === 'string' ? req.body.sql : '';
+    if (!sql.trim()) {
+      throw new HttpError(400, 'Upload a .sql or .csv debt extract first');
+    }
+    const parsed = parseDebtSource(sql);
+    const plan = planDebtImport(parsed.rows);
+    const skipReasons = [...parsed.skip_reasons, ...plan.skip_reasons].slice(0, 12);
+    const skipped = parsed.skipped + plan.skipped;
+    if (!plan.debts.length) {
+      throw new HttpError(
+        400,
+        skipReasons[0] ??
+          'No debts found. Use columns customer_name, receipt_number, product_name, quantity, unit_price, line_total, paid_amount, debt_balance',
+      );
+    }
+    if (parsed.rows.length > 20_000) {
+      throw new HttpError(400, 'Import is limited to 20,000 item rows');
+    }
+
+    res.status(200);
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.socket?.setNoDelay?.(true);
+    res.flushHeaders();
+
+    let lastWrite = 0;
+    let lastPercent = -1;
+    const writeEvent = (event: Record<string, unknown>, force = false) => {
+      const percent = typeof event.percent === 'number' ? event.percent : -1;
+      const now = Date.now();
+      if (!force && percent === lastPercent && now - lastWrite < 80) return;
+      lastWrite = now;
+      lastPercent = percent;
+      res.write(`${JSON.stringify(event)}\n`);
+      const flushable = res as unknown as { flush?: () => void };
+      if (typeof flushable.flush === 'function') flushable.flush();
+    };
+
+    try {
+      writeEvent({ type: 'started', total: plan.debts.length, done: 0, percent: 0, skipped }, true);
+      const result = await importDebtRows(req.user!.id, plan.debts, (progress) => {
+        const percent =
+          progress.total === 0 ? 100 : Math.min(100, Math.round((progress.done / progress.total) * 100));
+        writeEvent({
+          type: 'progress',
+          percent,
+          done: progress.done,
+          total: progress.total,
+          debts: progress.debts,
+          payments: progress.payments,
+          removed: progress.removed,
+          skipped,
+        });
+      });
+      writeEvent(
+        {
+          type: 'done',
+          percent: 100,
+          done: result.total,
+          total: result.total,
+          debts: result.debts,
+          payments: result.payments,
+          customers_created: result.customers_created,
+          removed: result.removed,
+          skipped,
+          skip_reasons: skipReasons,
         },
         true,
       );

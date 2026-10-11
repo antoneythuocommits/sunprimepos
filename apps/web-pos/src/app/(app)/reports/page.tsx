@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
-import type { SalesReport } from '@sunprime/shared';
+import { FormEvent, useEffect, useState } from 'react';
+import { formatQuantityDisplay, type SalesReport } from '@sunprime/shared';
 import { useProgress } from '@/components/ProgressDialog';
 import { api, money } from '@/lib/api';
 
@@ -31,6 +31,11 @@ export default function ReportsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load report');
     }
   }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
       <section className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4 space-y-4">
@@ -101,6 +106,78 @@ export default function ReportsPage() {
                   {money(report.totals.credit_revenue)} · {report.totals.credit_count} sales
                 </div>
               </div>
+            </div>
+            <div>
+              <h2 className="font-medium mb-2">Products sold</h2>
+              {(report.products ?? []).length === 0 ? (
+                <p className="text-sm text-[var(--muted)]">No products sold in this period.</p>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-[var(--muted)] border-b">
+                        <th className="py-2 pr-3">Product</th>
+                        <th className="pr-3">Qty</th>
+                        <th className="pr-3">Amount</th>
+                        <th>Profit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(report.products ?? []).map((p) => (
+                        <tr key={p.product_name} className="border-b border-[var(--line)]/50">
+                          <td className="py-2 pr-3">
+                            {p.product_name}
+                            {p.missing_buying_price && (
+                              <span className="ml-2 text-xs font-medium text-[var(--accent)]">
+                                No buying price
+                              </span>
+                            )}
+                          </td>
+                          <td className="pr-3">{formatQuantityDisplay(p.quantity)}</td>
+                          <td className="pr-3">{money(p.revenue)}</td>
+                          <td>{money(p.profit)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div>
+              <h2 className="font-medium mb-2">Sales</h2>
+              {(report.sales ?? []).length === 0 ? (
+                <p className="text-sm text-[var(--muted)]">No sales in this period.</p>
+              ) : (
+                <div className="space-y-3">
+                  {(report.sales ?? []).map((sale) => (
+                    <div key={sale.id} className="border border-[var(--line)] rounded-lg p-3">
+                      <div className="flex flex-wrap justify-between gap-2 text-sm mb-2">
+                        <span>
+                          {sale.receipt_number} · {new Date(sale.created_at).toLocaleString()} ·{' '}
+                          {sale.sale_type}
+                        </span>
+                        <span className="font-medium">
+                          {money(sale.total_amount)} · profit {money(sale.profit)}
+                        </span>
+                      </div>
+                      {sale.items.map((item, index) => (
+                        <div
+                          key={`${sale.id}-${index}`}
+                          className="flex flex-wrap justify-between gap-2 text-sm text-[var(--muted)]"
+                        >
+                          <span>
+                            {item.product_name} × {formatQuantityDisplay(item.quantity)}
+                            {item.missing_buying_price ? ' · no buying price' : ''}
+                          </span>
+                          <span>
+                            {money(item.line_total)} · profit {money(item.profit)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             {report.days && (
               <table className="w-full text-sm">

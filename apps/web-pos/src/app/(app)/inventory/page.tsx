@@ -27,7 +27,7 @@ export default function InventoryPage() {
   const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const [delta, setDelta] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [searching, setSearching] = useState(false);
   const skipSearchEffect = useRef(true);
 
@@ -53,7 +53,7 @@ export default function InventoryPage() {
   useEffect(() => {
     void load('', false)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load inventory'))
-      .finally(() => setLoading(false));
+      .finally(() => setReady(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -140,7 +140,14 @@ export default function InventoryPage() {
             </div>
           </div>
           {error && <p className="text-sm text-red-700 mb-2">{error}</p>}
-          {loading && <p className="text-sm text-[var(--muted)] mb-2">Loading inventory…</p>}
+          {isAdmin && products.some((p) => p.buying_price <= 0) && (
+            <p className="text-sm font-medium text-[var(--accent)] mb-2">
+              {products.filter((p) => p.buying_price <= 0).length} products have no buying price.
+            </p>
+          )}
+          {ready && products.length === 0 && (
+            <p className="text-sm text-[var(--muted)] mb-2">No products match.</p>
+          )}
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
@@ -154,10 +161,17 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => (
+                {products.map((p) => {
+                  const missingBuy = isAdmin && p.buying_price <= 0;
+                  return (
                   <tr key={p.id} className="border-b border-[var(--line)]/50">
                     <td className="py-2">
                       {p.name}
+                      {missingBuy && (
+                        <span className="ml-2 text-xs font-medium text-[var(--accent)]">
+                          No buying price
+                        </span>
+                      )}
                       <div className="text-xs text-[var(--muted)]">{p.sku}</div>
                     </td>
                     <td className="capitalize">{p.category || 'general'}</td>
@@ -196,7 +210,8 @@ export default function InventoryPage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

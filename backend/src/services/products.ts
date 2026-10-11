@@ -80,6 +80,12 @@ export async function listProducts(params: {
   };
 }
 
+export async function getProduct(id: string, includeBuying: boolean): Promise<Product> {
+  const result = await pool.query(`SELECT * FROM products WHERE id = $1`, [id]);
+  if (!result.rows[0]) throw new HttpError(404, 'Product not found');
+  return mapProduct(result.rows[0], includeBuying);
+}
+
 export async function getProductBySku(
   sku: string,
   includeBuying: boolean,

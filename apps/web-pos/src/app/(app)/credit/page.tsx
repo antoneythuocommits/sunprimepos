@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { CreditSettlementReceipt, Customer, CustomerCreditSummary } from '@sunprime/shared';
 import { formatQuantityDisplay } from '@sunprime/shared';
 import { useProgress } from '@/components/ProgressDialog';
@@ -17,11 +17,20 @@ export default function CreditPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [query, setQuery] = useState('');
+  const [totalDebt, setTotalDebt] = useState(0);
+  const skipSearch = useRef(true);
 
-  async function loadCustomers() {
-    const r = await api<{ customers: (Customer & { outstanding?: number })[] }>('/customers');
+  async function loadCustomers(search = query) {
+    const q = search.trim();
+    const path = q ? `/customers?search=${encodeURIComponent(q)}` : '/customers';
+    const r = await api<{
+      customers: (Customer & { outstanding?: number })[];
+      total_outstanding: number;
+    }>(path);
     setCustomers(r.customers);
+    setTotalDebt(r.total_outstanding ?? 0);
   }
 
   async function loadCredit(id: string) {
@@ -36,11 +45,25 @@ export default function CreditPage() {
   }
 
   useEffect(() => {
-    void withProgress(loadCustomers(), 'Loading customers…')
+    void withProgress(loadCustomers(''), 'Loading customers…')
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load customers'))
-      .finally(() => setLoading(false));
+      .finally(() => setReady(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (skipSearch.current) {
+      skipSearch.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      loadCustomers(query).catch((e) =>
+        setError(e instanceof Error ? e.message : 'Failed to search customers'),
+      );
+    }, 200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   async function createCustomer(e: FormEvent) {
     e.preventDefault();
@@ -87,9 +110,25 @@ export default function CreditPage() {
   }
 
   return (
+    <div className="space-y-4">
+      <div className="bg-[var(--panel)] border border-[var(--line)] rounded-xl px-4 py-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="font-semibold text-lg">Credit</h1>
+        <p className="text-[var(--muted)]">
+          Total debt{' '}
+          <span className="ml-2 text-2xl font-semibold text-[var(--ink)]">
+            {ready ? money(totalDebt) : '…'}
+          </span>
+        </p>
+      </div>
       <div className="grid lg:grid-cols-[320px_1fr] gap-4">
         <aside className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4 space-y-4">
-          <h1 className="font-semibold text-lg">Customers</h1>
+          <h2 className="font-semibold text-lg">Customers</h2>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search customer name"
+            className="w-full rounded-lg border px-3 py-2"
+          />
           <form onSubmit={createCustomer} className="space-y-2">
             <input
               value={newName}
@@ -108,7 +147,11 @@ export default function CreditPage() {
               Add customer
             </button>
           </form>
-          {loading && <p className="text-sm text-[var(--muted)]">Loading customers…</p>}
+          {ready && customers.length === 0 && (
+            <p className="text-sm text-[var(--muted)]">
+              {query.trim() ? 'No customers match that name.' : 'No customers yet.'}
+            </p>
+          )}
           <ul className="max-h-[60vh] overflow-auto divide-y divide-[var(--line)]">
             {customers.map((c) => (
               <li key={c.id}>
@@ -163,11 +206,14 @@ export default function CreditPage() {
               <div className="space-y-3">
                 {summary.orders.map((o) => (
                   <div key={o.sale.id} className="border border-[var(--line)] rounded-lg p-3">
-                    <div className="flex justify-between text-sm mb-2">
+                    <div className="flex flex-wrap justify-between gap-2 text-sm mb-2">
                       <span>
                         {o.sale.receipt_number} · {new Date(o.sale.created_at).toLocaleString()}
                       </span>
-                      <span className="font-medium">Balance {money(o.outstanding_balance)}</span>
+                      <span className="font-medium text-right">
+                        Total {money(o.sale.total_amount)} · Paid {money(o.allocated_total)} · Balance{' '}
+                        {money(o.outstanding_balance)}
+                      </span>
                     </div>
                     {o.items.map((it) => (
                       <div key={it.id} className="flex justify-between text-sm text-[var(--muted)]">
@@ -199,5 +245,6 @@ export default function CreditPage() {
           )}
         </section>
       </div>
+    </div>
   );
 }

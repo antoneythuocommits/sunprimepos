@@ -1,12 +1,22 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Pressable, Text } from 'react-native';
 import { getSupabase } from '../../src/lib/supabase';
+import { useProgress } from '../../src/components/ProgressDialog';
+
+const tabs = [
+  { name: 'reports', title: 'Reports' },
+  { name: 'credit', title: 'Credit' },
+  { name: 'inventory', title: 'Inventory' },
+  { name: 'valuation', title: 'Valuation' },
+] as const;
 
 export default function TabsLayout() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { withProgress, beginNavigation } = useProgress();
 
   async function logout() {
-    await getSupabase().auth.signOut();
+    await withProgress(getSupabase().auth.signOut(), 'Signing out…');
     router.replace('/login');
   }
 
@@ -23,10 +33,19 @@ export default function TabsLayout() {
         ),
       }}
     >
-      <Tabs.Screen name="reports" options={{ title: 'Reports' }} />
-      <Tabs.Screen name="credit" options={{ title: 'Credit' }} />
-      <Tabs.Screen name="inventory" options={{ title: 'Inventory' }} />
-      <Tabs.Screen name="valuation" options={{ title: 'Valuation' }} />
+      {tabs.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{ title: tab.title }}
+          listeners={{
+            tabPress: () => {
+              if (pathname?.includes(tab.name)) return;
+              beginNavigation(`Opening ${tab.title.toLowerCase()}…`);
+            },
+          }}
+        />
+      ))}
     </Tabs>
   );
 }

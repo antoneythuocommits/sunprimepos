@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.ant0ney.sunprimepos",
-      "versionCode": 4,
+      "versionCode": 6,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -27,6 +27,7 @@
       "expo-router",
       "expo-secure-store",
       "expo-font",
+      "@react-native-community/datetimepicker",
       [
         "expo-build-properties",
         {

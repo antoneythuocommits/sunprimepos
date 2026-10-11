@@ -1,12 +1,25 @@
 import 'react-native-gesture-handler';
 import { Stack, useRouter, useRootNavigationState } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { getSupabase, supabaseConfigured } from '../src/lib/supabase';
 import { api } from '../src/lib/api';
 import { OfflineOverlay } from '../src/components/OfflineOverlay';
+import { ProgressProvider, useProgress } from '../src/components/ProgressDialog';
+
+function BootProgress({ open }: { open: boolean }) {
+  const { show, hide } = useProgress();
+
+  useEffect(() => {
+    if (!open) return;
+    const id = show('Starting…');
+    return () => hide(id);
+  }, [open, show, hide]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -77,30 +90,12 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style="dark" />
-      {booting && (
-        <View
-          style={{
-            ...StyleSheetAbsolute,
-          }}
-        >
-          <ActivityIndicator size="large" color="#2f5540" />
-        </View>
-      )}
-      <Stack screenOptions={{ headerShown: false }} />
-      <OfflineOverlay />
+      <ProgressProvider>
+        <StatusBar style="dark" />
+        <BootProgress open={booting} />
+        <Stack screenOptions={{ headerShown: false }} />
+        <OfflineOverlay />
+      </ProgressProvider>
     </GestureHandlerRootView>
   );
 }
-
-const StyleSheetAbsolute = {
-  position: 'absolute' as const,
-  left: 0,
-  right: 0,
-  top: 0,
-  bottom: 0,
-  zIndex: 10,
-  justifyContent: 'center' as const,
-  alignItems: 'center' as const,
-  backgroundColor: '#f3f0e8',
-};

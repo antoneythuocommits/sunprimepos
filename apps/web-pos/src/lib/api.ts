@@ -153,6 +153,114 @@ export async function importInventoryWithProgress(
   return result;
 }
 
+export interface DebtImportProgress {
+  type: 'started' | 'progress' | 'done' | 'error';
+  percent?: number;
+  done?: number;
+  total?: number;
+  debts?: number;
+  payments?: number;
+  customers_created?: number;
+  removed?: number;
+  skipped?: number;
+  skip_reasons?: string[];
+  error?: string;
+}
+
+export interface DebtImportResult {
+  debts: number;
+  payments: number;
+  customers_created: number;
+  removed: number;
+  skipped: number;
+  total: number;
+  skip_reasons: string[];
+}
+
+export async function importDebtsWithProgress(
+  sql: string,
+  onProgress: (event: DebtImportProgress) => void,
+): Promise<DebtImportResult> {
+  const session = await getSession();
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  headers.set('Accept', 'application/x-ndjson, application/json');
+  if (session?.access_token) {
+    headers.set('Authorization', `Bearer ${session.access_token}`);
+  }
+
+  const res = await apiFetch(`${API_URL}/debts/import`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ sql }),
+  });
+
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('ndjson')) {
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    const result = body as DebtImportResult;
+    onProgress({ type: 'done', percent: 100, ...result });
+    return result;
+  }
+
+  if (!res.body) {
+    throw new ApiError(res.status, 'Import stream was empty');
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: DebtImportResult | null = null;
+  let streamError: string | null = null;
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const event = JSON.parse(trimmed) as DebtImportProgress;
+    if (event.type === 'error') {
+      streamError = event.error ?? 'Import failed';
+      return;
+    }
+    onProgress(event);
+    if (event.type === 'done') {
+      result = {
+        debts: event.debts ?? 0,
+        payments: event.payments ?? 0,
+        customers_created: event.customers_created ?? 0,
+        removed: event.removed ?? 0,
+        skipped: event.skipped ?? 0,
+        total: event.total ?? 0,
+        skip_reasons: event.skip_reasons ?? [],
+      };
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) handleLine(line);
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) handleLine(buffer);
+
+  if (streamError) {
+    throw new ApiError(res.ok ? 400 : res.status, streamError);
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, 'Import failed');
+  }
+  if (!result) {
+    throw new ApiError(500, 'Import did not finish');
+  }
+  return result;
+}
+
 export async function loginWithUsername(username: string, password: string) {
   const res = await apiFetch(`${API_URL}/auth/login`, {
     method: 'POST',

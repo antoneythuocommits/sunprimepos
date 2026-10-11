@@ -13,6 +13,7 @@
     "eas-build-post-install": "pnpm --filter @sunprime/shared build"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "8.2.0",
     "@sunprime/shared": "workspace:*",
     "@supabase/supabase-js": "^2.47.10",
     "expo": "~52.0.23",
@@ -31,6 +32,7 @@
     "react-native-screens": "~4.4.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "@types/react": "~18.3.12",
     "typescript": "^5.7.2"
   }
