@@ -91,10 +91,14 @@ export async function getSalesReport(rawQuery: unknown): Promise<SalesReport> {
        s.created_at,
        si.product_name,
        si.quantity,
+       si.unit_price,
        si.line_total,
-       si.buying_price
+       si.buying_price,
+       p.category,
+       p.buying_price AS product_buy
      FROM sales s
      LEFT JOIN sale_items si ON si.sale_id = s.id
+     LEFT JOIN products p ON p.id = si.product_id
      WHERE s.status = 'completed'
        AND s.created_at >= $1::date
        AND s.created_at < ($2::date + INTERVAL '1 day')
@@ -105,6 +109,9 @@ export async function getSalesReport(rawQuery: unknown): Promise<SalesReport> {
   const sales: SalesReportSale[] = [];
   const saleIndex = new Map<string, SalesReportSale>();
   const productIndex = new Map<string, SalesReportProduct>();
+  const profitProbe: Array<Record<string, unknown>> = [];
+  let fegiLineCount = 0;
+  let fegiInflatedCount = 0;
 
   for (const row of lines.rows) {
     const saleId = String(row.sale_id);
@@ -141,6 +148,44 @@ export async function getSalesReport(rawQuery: unknown): Promise<SalesReport> {
     sale.items.push(item);
     sale.profit = roundMoney(sale.profit + profit);
 
+    // #region agent log
+    const category = row.category == null ? '' : String(row.category);
+    const isFegi = category.trim().toLowerCase() === 'fegi';
+    const unitPrice = toNumber(row.unit_price);
+    const productBuy = row.product_buy == null ? null : toNumber(row.product_buy);
+    if (isFegi || item.product_name.toLowerCase().includes('sportsman')) {
+      const naiveCost = roundMoney(quantity * buying);
+      const scaledCost = roundMoney(quantity * 10 * buying);
+      const scaledProfit = roundMoney(lineTotal - scaledCost);
+      if (isFegi) {
+        fegiLineCount += 1;
+        if (Math.abs(profit - scaledProfit) > 0.001) fegiInflatedCount += 1;
+      }
+      const isSportsman = item.product_name.toLowerCase().includes('sportsman');
+      const sportsmanCount = profitProbe.filter((line) => String(line.name).toLowerCase().includes('sportsman')).length;
+      if ((isSportsman && sportsmanCount < 6) || profitProbe.length < 8) {
+        profitProbe.push({
+          receipt: sale.receipt_number,
+          name: item.product_name,
+          category,
+          quantity,
+          unitPrice,
+          buying,
+          productBuy,
+          lineTotal,
+          reportedProfit: profit,
+          naiveCost,
+          naiveProfit: roundMoney(lineTotal - naiveCost),
+          scaledCost,
+          scaledProfit,
+          qtyTimesUnit: roundMoney(quantity * unitPrice),
+          qtyTimes10TimesUnit: roundMoney(quantity * 10 * unitPrice),
+          wholeQty: Math.abs(quantity - Math.round(quantity)) < 1e-9,
+        });
+      }
+    }
+    // #endregion
+
     const key = item.product_name.toLowerCase();
     const product = productIndex.get(key) ?? {
       product_name: item.product_name,
@@ -164,6 +209,7 @@ export async function getSalesReport(rawQuery: unknown): Promise<SalesReport> {
 
   // #region agent log
   fetch('http://127.0.0.1:7689/ingest/4773018b-d033-46d7-8403-a56ad49fb9ca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bf4697'},body:JSON.stringify({sessionId:'bf4697',runId:'pre-fix',hypothesisId:'A',location:'reports.ts:getSalesReport',message:'sales report aggregates',data:{from:query.from,to:query.to,saleCount:totals.sale_count,lineRows:lines.rows.length,nullProductNames:lines.rows.filter((row)=>row.product_name==null).length,productCount:products.length,salesWithItems:sales.filter((sale)=>sale.items.length>0).length},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7689/ingest/4773018b-d033-46d7-8403-a56ad49fb9ca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3e8c52'},body:JSON.stringify({sessionId:'3e8c52',runId:'pre-fix',hypothesisId:'A-E',location:'reports.ts:getSalesReport',message:'fegi profit formula probe',data:{from:query.from,to:query.to,fegiLineCount,fegiInflatedCount,probed:profitProbe.length,lines:profitProbe},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
   return {
