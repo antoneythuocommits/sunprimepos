@@ -4,6 +4,7 @@ import {
   computeChange,
   computeSaleTotals,
   formatQuantityDisplay,
+  lineCost,
   lineTotal,
   priceSaleLine,
   roundMoney,
@@ -35,6 +36,21 @@ describe('lineTotal / change / sale totals', () => {
     expect(totals.total_amount).toBe(230);
     expect(totals.cost).toBe(160);
     expect(totals.profit).toBe(70);
+  });
+
+  it('scales fegi cost by the same x10 used for the selling line', () => {
+    expect(lineCost(0.1, 345, 'fegi')).toBe(345);
+    expect(lineCost(0.5, 345, 'fegi')).toBe(1725);
+    expect(lineCost(1, 163.5, 'fegi')).toBe(1635);
+    expect(lineCost(1, 48.8, 'general')).toBe(48.8);
+
+    const totals = computeSaleTotals([
+      { quantity: 0.1, unit_price: 350, buying_price: 345, line_total: 350, category: 'fegi' },
+      { quantity: 1, unit_price: 75, buying_price: 48.8, line_total: 75, category: 'general' },
+    ]);
+    expect(totals.total_amount).toBe(425);
+    expect(totals.cost).toBe(393.8);
+    expect(totals.profit).toBe(31.2);
   });
 });
 

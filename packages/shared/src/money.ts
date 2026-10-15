@@ -30,6 +30,17 @@ export function lineTotal(quantity: number, unitPrice: number): number {
   return roundMoney(quantity * unitPrice);
 }
 
+/**
+ * Cost of a sale line. Fegi buy and sell prices are both the price of 0.1,
+ * and the selling line total is quantity × 10 × that price, so cost uses the same ×10.
+ */
+export function lineCost(quantity: number, buyingPrice: number, category?: string | null): number {
+  const qty = roundQuantity(quantity);
+  const buying = roundMoney(buyingPrice);
+  const units = isFegiCategory(category) ? roundQuantity(qty * 10) : qty;
+  return lineTotal(units, buying);
+}
+
 export function priceSaleLine(input: {
   category?: string | null;
   quantity: number;
@@ -70,6 +81,7 @@ export function computeSaleTotals(
     unit_price: number;
     buying_price: number;
     line_total?: number;
+    category?: string | null;
   }>,
 ): { total_amount: number; cost: number; profit: number } {
   let total_amount = 0;
@@ -77,7 +89,7 @@ export function computeSaleTotals(
   for (const item of items) {
     const selling = item.line_total ?? lineTotal(item.quantity, item.unit_price);
     total_amount = roundMoney(total_amount + selling);
-    cost = roundMoney(cost + lineTotal(item.quantity, item.buying_price));
+    cost = roundMoney(cost + lineCost(item.quantity, item.buying_price, item.category));
   }
   return {
     total_amount,
