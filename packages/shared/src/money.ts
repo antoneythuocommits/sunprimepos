@@ -31,14 +31,22 @@ export function lineTotal(quantity: number, unitPrice: number): number {
 }
 
 /**
+ * Pieces removed from stock. Fegi quantities are tenths of a piece:
+ * 0.1 removes 1, 1 removes 10, 1.8 removes 18.
+ */
+export function stockDeduction(quantity: number, category?: string | null): number {
+  const qty = roundQuantity(quantity);
+  if (!isFegiCategory(category)) return qty;
+  return roundQuantity(qty * 10);
+}
+
+/**
  * Cost of a sale line. Fegi buy and sell prices are both the price of 0.1,
  * and the selling line total is quantity × 10 × that price, so cost uses the same ×10.
  */
 export function lineCost(quantity: number, buyingPrice: number, category?: string | null): number {
-  const qty = roundQuantity(quantity);
   const buying = roundMoney(buyingPrice);
-  const units = isFegiCategory(category) ? roundQuantity(qty * 10) : qty;
-  return lineTotal(units, buying);
+  return lineTotal(stockDeduction(quantity, category), buying);
 }
 
 export function priceSaleLine(input: {

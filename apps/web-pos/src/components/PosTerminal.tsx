@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Customer, Product, SaleWithItems } from '@sunprime/shared';
-import { formatQuantityDisplay, isFegiCategory, priceSaleLine, roundQuantity } from '@sunprime/shared';
+import { formatQuantityDisplay, isFegiCategory, priceSaleLine, roundQuantity, stockDeduction } from '@sunprime/shared';
 import { api, money } from '@/lib/api';
 import { printReceipt, ReceiptView } from '@/components/ReceiptView';
 import { useProgress } from '@/components/ProgressDialog';
@@ -200,7 +200,15 @@ export function PosTerminal() {
     }
     const existingQty = cart.find((l) => l.product.id === dialogProduct.id)?.quantity ?? 0;
     const available = Math.max(0, dialogProduct.stock_quantity);
-    if (roundQuantity(existingQty + quantity) > roundQuantity(available)) {
+    const fegi = isFegiCategory(dialogProduct.category);
+    const requested = roundQuantity(existingQty + quantity);
+    const scaledRequested = stockDeduction(requested, dialogProduct.category);
+    // #region agent log
+    if (fegi) {
+      fetch('http://127.0.0.1:7689/ingest/4773018b-d033-46d7-8403-a56ad49fb9ca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3e8c52'},body:JSON.stringify({sessionId:'3e8c52',runId:'post-fix',hypothesisId:'C',location:'PosTerminal.tsx:addToCart',message:'fegi stock check',data:{name:dialogProduct.name,typedQty:quantity,existingQty,requested,available,scaledRequested,blockedByTyped:requested>roundQuantity(available),blockedByScaled:scaledRequested>roundQuantity(available)},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
+    if (scaledRequested > roundQuantity(available)) {
       setError(
         available > 0
           ? `Only ${formatQuantityDisplay(available)} ${dialogProduct.unit} in stock`

@@ -6,6 +6,7 @@ import {
   formatQuantityDisplay,
   lineCost,
   lineTotal,
+  stockDeduction,
   priceSaleLine,
   roundMoney,
 } from '@sunprime/shared';
@@ -36,6 +37,14 @@ describe('lineTotal / change / sale totals', () => {
     expect(totals.total_amount).toBe(230);
     expect(totals.cost).toBe(160);
     expect(totals.profit).toBe(70);
+  });
+
+  it('deducts fegi stock in pieces, ten per whole quantity', () => {
+    expect(stockDeduction(0.1, 'fegi')).toBe(1);
+    expect(stockDeduction(1, 'fegi')).toBe(10);
+    expect(stockDeduction(1.8, 'fegi')).toBe(18);
+    expect(stockDeduction(0.5, 'fegi')).toBe(5);
+    expect(stockDeduction(2, 'general')).toBe(2);
   });
 
   it('scales fegi cost by the same x10 used for the selling line', () => {
