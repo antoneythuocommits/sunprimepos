@@ -92,13 +92,8 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
       const buyingPrice = toNumber(product.buying_price);
       const currentStock = toNumber(product.stock_quantity);
       const category = product.category ? String(product.category) : '';
-      const fegi = category.trim().toLowerCase() === 'fegi';
       const scaledUnits = stockDeduction(priced.quantity, category);
       const newStock = roundQuantity(currentStock - scaledUnits);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7689/ingest/4773018b-d033-46d7-8403-a56ad49fb9ca',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'3e8c52'},body:JSON.stringify({sessionId:'3e8c52',runId:'post-fix',hypothesisId:'A-E',location:'sales.ts:createSale',message:'stock deduction',data:{name:String(product.name),category,fegi,enteredQty:item.quantity,pricedQty:priced.quantity,unitPrice:priced.unit_price,lineTotal:priced.line_total,currentStock,deducted:scaledUnits,newStock,scaledUnits,stockIfScaled:roundQuantity(currentStock-scaledUnits),wholeQty:Math.abs(priced.quantity-Math.round(priced.quantity))<1e-9},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       if (newStock < 0) {
         throw new HttpError(400, `Insufficient stock for ${product.name}`);
