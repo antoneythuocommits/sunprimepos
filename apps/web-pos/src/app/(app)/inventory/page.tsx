@@ -35,7 +35,7 @@ export default function InventoryPage() {
   async function load(q = search, silent = false) {
     const run = async () => {
       const r = await api<{ products: Product[] }>(
-        `/products?search=${encodeURIComponent(q)}&limit=2000`,
+        `/products?search=${encodeURIComponent(q)}&active=true&limit=2000`,
       );
       setProducts(r.products);
     };
@@ -98,6 +98,26 @@ export default function InventoryPage() {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
+    }
+  }
+
+  async function deleteProduct(p: Product) {
+    if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      await withProgress(
+        (async () => {
+          await api(`/products/${p.id}`, { method: 'DELETE' });
+          if (editing?.id === p.id) {
+            setEditing(null);
+            setForm(emptyForm);
+          }
+          await load(search, true);
+        })(),
+        'Deleting product…',
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
     }
   }
 
@@ -223,6 +243,15 @@ export default function InventoryPage() {
                       >
                         Adjust stock
                       </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="underline text-xs text-red-700"
+                          onClick={() => void deleteProduct(p)}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                   );

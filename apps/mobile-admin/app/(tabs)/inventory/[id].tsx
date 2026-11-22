@@ -85,6 +85,28 @@ export default function ProductScreen() {
     }
   }
 
+  function confirmDelete() {
+    if (!product) return;
+    Alert.alert('Delete product', `Delete "${product.name}"? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await withProgress(
+              api(`/products/${product.id}`, { method: 'DELETE' }),
+              'Deleting product…',
+            );
+            router.back();
+          } catch (e) {
+            Alert.alert('Failed', e instanceof Error ? e.message : 'Error');
+          }
+        },
+      },
+    ]);
+  }
+
   if (!product) {
     return <View style={styles.container} />;
   }
@@ -132,6 +154,10 @@ export default function ProductScreen() {
       <Pressable style={styles.btn} onPress={savePrices}>
         <Text style={styles.btnText}>Save prices</Text>
       </Pressable>
+
+      <Pressable style={styles.deleteBtn} onPress={confirmDelete}>
+        <Text style={styles.deleteText}>Delete product</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -158,4 +184,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontWeight: '600' },
+  deleteBtn: {
+    marginTop: 24,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#b42318',
+  },
+  deleteText: { color: '#b42318', fontWeight: '600' },
 });

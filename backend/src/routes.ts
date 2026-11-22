@@ -101,6 +101,15 @@ router.patch(
   }),
 );
 
+router.delete(
+  '/products/:id',
+  requireRole(UserRole.ADMIN),
+  asyncHandler(async (req, res) => {
+    const result = await products.deleteProduct(req.params.id);
+    res.json(result);
+  }),
+);
+
 router.post(
   '/products/:id/stock',
   asyncHandler(async (req, res) => {

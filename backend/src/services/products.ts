@@ -167,6 +167,30 @@ export async function updateProduct(
   return mapProduct(result.rows[0], includeBuying);
 }
 
+/**
+ * Products with no sales are removed outright. Products already on receipts are
+ * archived instead (hidden, barcode freed) so sales history and reports stay intact.
+ */
+export async function deleteProduct(id: string): Promise<{ deleted: boolean; archived: boolean }> {
+  return withTransaction(async (client) => {
+    const productRes = await client.query(`SELECT id FROM products WHERE id = $1 FOR UPDATE`, [id]);
+    if (!productRes.rows[0]) throw new HttpError(404, 'Product not found');
+
+    const sold = await client.query(`SELECT 1 FROM sale_items WHERE product_id = $1 LIMIT 1`, [id]);
+    if (sold.rowCount) {
+      await client.query(
+        `UPDATE products SET is_active = FALSE, sku = NULL, updated_at = NOW() WHERE id = $1`,
+        [id],
+      );
+      return { deleted: false, archived: true };
+    }
+
+    await client.query(`DELETE FROM stock_adjustments WHERE product_id = $1`, [id]);
+    await client.query(`DELETE FROM products WHERE id = $1`, [id]);
+    return { deleted: true, archived: false };
+  });
+}
+
 export async function adjustStock(
   productId: string,
   userId: string,

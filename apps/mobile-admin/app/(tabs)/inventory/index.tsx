@@ -23,7 +23,7 @@ export default function InventoryScreen() {
 
   async function load(q: string) {
     const r = await api<{ products: Product[] }>(
-      `/products?search=${encodeURIComponent(q)}&limit=2000`,
+      `/products?search=${encodeURIComponent(q)}&active=true&limit=2000`,
     );
     setProducts(r.products);
   }
