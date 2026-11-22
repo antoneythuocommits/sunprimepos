@@ -80,17 +80,21 @@ function toRow(raw: Record<string, unknown>): InventoryImportRow | null {
   const name = mapped.name == null ? '' : String(mapped.name).trim();
   if (!name) return null;
 
+  const category = parseCategory(mapped.category);
+  const stock = Math.max(0, parseNumber(mapped.stock_quantity, 0));
+
   return {
     name: name.slice(0, 200),
     sku: parseSku(mapped.sku),
     buying_price: Math.max(0, parseNumber(mapped.buying_price, 0)),
     selling_price: Math.max(0, parseNumber(mapped.selling_price, 0)),
-    stock_quantity: Math.max(0, parseNumber(mapped.stock_quantity, 0)),
+    // Fegi stock is whole pieces only.
+    stock_quantity: category === 'fegi' ? Math.round(stock) : stock,
     unit: (mapped.unit == null || String(mapped.unit).trim() === ''
       ? 'pcs'
       : String(mapped.unit).trim()
     ).slice(0, 20),
-    category: parseCategory(mapped.category),
+    category,
     is_active: parseBoolean(mapped.is_active, true),
   };
 }

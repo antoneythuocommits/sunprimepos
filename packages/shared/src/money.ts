@@ -31,13 +31,23 @@ export function lineTotal(quantity: number, unitPrice: number): number {
 }
 
 /**
+ * Fegi stock is always whole pieces. A sale quantity converts to pieces at x10
+ * (0.3 -> 3, 1 -> 10, 1.5 -> 15), so it must be a multiple of 0.1.
+ */
+export function isValidFegiQuantity(quantity: number): boolean {
+  if (!Number.isFinite(quantity) || quantity <= 0) return false;
+  const pieces = roundQuantity(quantity) * 10;
+  return Math.abs(pieces - Math.round(pieces)) < 1e-6;
+}
+
+/**
  * Pieces removed from stock. Fegi quantities are tenths of a piece:
- * 0.1 removes 1, 1 removes 10, 1.8 removes 18.
+ * 0.1 removes 1, 1 removes 10, 1.8 removes 18. Always a whole number for fegi.
  */
 export function stockDeduction(quantity: number, category?: string | null): number {
   const qty = roundQuantity(quantity);
   if (!isFegiCategory(category)) return qty;
-  return roundQuantity(qty * 10);
+  return Math.round(qty * 10);
 }
 
 /**

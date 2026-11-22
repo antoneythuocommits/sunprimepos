@@ -51,6 +51,9 @@ export default function InventoryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <Pressable style={styles.addBtn} onPress={() => router.push('/(tabs)/inventory/new')}>
+        <Text style={styles.addBtnText}>+ Add product</Text>
+      </Pressable>
       <TextInput
         style={styles.input}
         placeholder="Search products…"
@@ -99,4 +102,6 @@ const styles = StyleSheet.create({
   name: { fontWeight: '600', color: '#1a211c' },
   muted: { color: '#5c675f', marginTop: 2 },
   warn: { color: '#c47a1a', fontWeight: '600', marginTop: 2 },
+  addBtn: { backgroundColor: '#2f5540', padding: 14, borderRadius: 10, alignItems: 'center' },
+  addBtnText: { color: '#fff', fontWeight: '600' },
 });

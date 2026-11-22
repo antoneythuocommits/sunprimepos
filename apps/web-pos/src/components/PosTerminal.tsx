@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Customer, Product, SaleWithItems } from '@sunprime/shared';
-import { formatQuantityDisplay, isFegiCategory, priceSaleLine, roundQuantity, stockDeduction } from '@sunprime/shared';
+import { formatQuantityDisplay, isFegiCategory, isValidFegiQuantity, priceSaleLine, roundQuantity, stockDeduction } from '@sunprime/shared';
 import { api, money } from '@/lib/api';
 import { printReceipt, ReceiptView } from '@/components/ReceiptView';
 import { useProgress } from '@/components/ProgressDialog';
@@ -198,6 +198,10 @@ export function PosTerminal() {
       setError('Enter a valid quantity and price');
       return;
     }
+    if (isFegiCategory(dialogProduct.category) && !isValidFegiQuantity(quantity)) {
+      setError('Fegi quantity must be in steps of 0.1 (e.g. 0.3, 1, 1.5)');
+      return;
+    }
     const existingQty = cart.find((l) => l.product.id === dialogProduct.id)?.quantity ?? 0;
     const available = Math.max(0, dialogProduct.stock_quantity);
     const requested = roundQuantity(existingQty + quantity);
@@ -216,7 +220,7 @@ export function PosTerminal() {
       if (existingIdx >= 0) {
         const next = [...prev];
         const existing = next[existingIdx];
-        const mergedQty = existing.quantity + quantity;
+        const mergedQty = roundQuantity(existing.quantity + quantity);
         next[existingIdx] = {
           ...existing,
           quantity: mergedQty,
@@ -590,7 +594,7 @@ export function PosTerminal() {
             {isFegiCategory(dialogProduct.category) && (
               <p className="text-xs text-[var(--muted)]">
                 Decimal qty (0.1) keeps price and totals units × price. Whole qty (1, 5) shows
-                price × 10.
+                price × 10. Stock deducted: 0.3 → 3, 1 → 10, 1.5 → 15 {dialogProduct.unit}.
               </p>
             )}
             {existingCartLine && (

@@ -3,6 +3,8 @@ import {
   computeChange,
   computeSaleTotals,
   createSaleSchema,
+  isFegiCategory,
+  isValidFegiQuantity,
   priceSaleLine,
   roundMoney,
   roundQuantity,
@@ -82,6 +84,13 @@ export async function createSale(cashierId: string, rawInput: unknown): Promise<
       const product = productRes.rows[0];
       if (!product || !product.is_active) {
         throw new HttpError(400, `Product not found or inactive: ${item.product_id}`);
+      }
+
+      if (isFegiCategory(product.category ? String(product.category) : null) && !isValidFegiQuantity(item.quantity)) {
+        throw new HttpError(
+          400,
+          `Fegi quantity for ${product.name} must be in steps of 0.1 (e.g. 0.3, 1, 1.5)`,
+        );
       }
 
       const priced = priceSaleLine({

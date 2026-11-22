@@ -30,6 +30,7 @@ export default function InventoryPage() {
   const [ready, setReady] = useState(false);
   const [searching, setSearching] = useState(false);
   const skipSearchEffect = useRef(true);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   async function load(q = search, silent = false) {
     const run = async () => {
@@ -127,6 +128,20 @@ export default function InventoryPage() {
         <section className="bg-[var(--panel)] border border-[var(--line)] rounded-xl p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
             <h1 className="text-lg font-semibold">Inventory</h1>
+            {isAdmin && (
+              <button
+                type="button"
+                className="ml-auto px-3 py-2 rounded-lg bg-[var(--brand)] text-white text-sm"
+                onClick={() => {
+                  setEditing(null);
+                  setForm(emptyForm);
+                  setError(null);
+                  nameRef.current?.focus();
+                }}
+              >
+                + Add product
+              </button>
+            )}
             <div className="relative">
               <input
                 value={search}
@@ -228,6 +243,7 @@ export default function InventoryPage() {
                       {field.replace('_', ' ')}
                     </label>
                     <input
+                      ref={field === 'name' ? nameRef : undefined}
                       value={form[field]}
                       onChange={(e) => setForm({ ...form, [field]: e.target.value })}
                       className="w-full mt-1 rounded-lg border border-[var(--line)] px-3 py-2"

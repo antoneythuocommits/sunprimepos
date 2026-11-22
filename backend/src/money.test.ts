@@ -4,6 +4,7 @@ import {
   computeChange,
   computeSaleTotals,
   formatQuantityDisplay,
+  isValidFegiQuantity,
   lineCost,
   lineTotal,
   stockDeduction,
@@ -45,6 +46,20 @@ describe('lineTotal / change / sale totals', () => {
     expect(stockDeduction(1.8, 'fegi')).toBe(18);
     expect(stockDeduction(0.5, 'fegi')).toBe(5);
     expect(stockDeduction(2, 'general')).toBe(2);
+  });
+
+  it('always deducts whole fegi pieces', () => {
+    expect(stockDeduction(5, 'fegi')).toBe(50);
+    expect(stockDeduction(1.5, 'fegi')).toBe(15);
+    expect(stockDeduction(0.9, 'fegi')).toBe(9);
+    expect(stockDeduction(0.3, 'fegi')).toBe(3);
+    expect(stockDeduction(0.7, 'fegi')).toBe(7);
+    expect(Number.isInteger(stockDeduction(0.1 + 0.2, 'fegi'))).toBe(true);
+  });
+
+  it('accepts fegi quantities only in steps of 0.1', () => {
+    for (const q of [0.1, 0.3, 0.9, 1, 1.5, 5, 0.1 + 0.2]) expect(isValidFegiQuantity(q)).toBe(true);
+    for (const q of [0, -1, 0.05, 1.25, 0.333]) expect(isValidFegiQuantity(q)).toBe(false);
   });
 
   it('scales fegi cost by the same x10 used for the selling line', () => {

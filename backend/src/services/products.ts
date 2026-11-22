@@ -2,6 +2,8 @@ import {
   createProductSchema,
   stockAdjustSchema,
   updateProductSchema,
+  isFegiCategory,
+  isWholeQuantity,
   normalizeProductCategory,
   roundMoney,
   roundQuantity,
@@ -102,8 +104,13 @@ export async function getProductBySku(
   return mapProduct(result.rows[0], includeBuying);
 }
 
+const FEGI_WHOLE_STOCK = 'Fegi stock must be a whole number';
+
 export async function createProduct(raw: unknown, includeBuying: boolean): Promise<Product> {
   const input = createProductSchema.parse(raw);
+  if (isFegiCategory(input.category) && !isWholeQuantity(input.stock_quantity)) {
+    throw new HttpError(400, FEGI_WHOLE_STOCK);
+  }
   const result = await pool.query(
     `INSERT INTO products (
        name, sku, buying_price, selling_price, stock_quantity, unit, category, is_active, allow_negative_stock
@@ -134,6 +141,11 @@ export async function updateProduct(
   if (!existing.rows[0]) throw new HttpError(404, 'Product not found');
 
   const current = existing.rows[0];
+  const nextCategory =
+    input.category !== undefined ? normalizeProductCategory(input.category) : current.category;
+  if (isFegiCategory(nextCategory) && !isWholeQuantity(toNumber(current.stock_quantity))) {
+    throw new HttpError(400, `${FEGI_WHOLE_STOCK}; adjust the stock before changing to fegi`);
+  }
   const result = await pool.query(
     `UPDATE products SET
        name = $1, sku = $2, buying_price = $3, selling_price = $4,
@@ -146,7 +158,7 @@ export async function updateProduct(
       input.buying_price !== undefined ? roundMoney(input.buying_price) : current.buying_price,
       input.selling_price !== undefined ? roundMoney(input.selling_price) : current.selling_price,
       input.unit ?? current.unit,
-      input.category !== undefined ? normalizeProductCategory(input.category) : current.category,
+      nextCategory,
       input.is_active ?? current.is_active,
       input.allow_negative_stock ?? current.allow_negative_stock,
       id,
@@ -169,6 +181,9 @@ export async function adjustStock(
     ]);
     if (!productRes.rows[0]) throw new HttpError(404, 'Product not found');
     const product = productRes.rows[0];
+    if (isFegiCategory(product.category) && !isWholeQuantity(input.delta)) {
+      throw new HttpError(400, 'Fegi stock changes must be whole numbers');
+    }
     const newStock = roundQuantity(toNumber(product.stock_quantity) + input.delta);
     if (newStock < 0) {
       throw new HttpError(400, 'Stock cannot be negative');
